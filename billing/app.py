@@ -38,5 +38,16 @@ def update_provider(provider_id):
         return jsonify({"error": "Failed to update provider"}), 500
     return jsonify({"success": True}), 200
 
+
+@app.route("/rates", methods=["POST"])
+def upload_rates():
+    if "file" not in request.files:
+        return jsonify({"error": "file is required"}), 400
+    file = request.files["file"]
+    return jsonify({"message": "rates uploaded", "filename": file.filename}), 200
+
+
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
