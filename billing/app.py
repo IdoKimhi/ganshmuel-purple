@@ -2,6 +2,16 @@ from flask import Flask, jsonify
 
 app = Flask(__name__)
 
+
+@app.route("/provider", methods=["POST"])
+def create_provider():
+    data = request.get_json()
+    if not data or "name" not in data:
+        return jsonify({"error": "name is required"}), 400
+    provider_id = str(uuid.uuid4())
+    return jsonify({"id": provider_id}), 201
+
+
 @app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "OK"}), 200
