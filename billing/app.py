@@ -13,6 +13,13 @@ def create_provider():
     provider_id = str(uuid.uuid4())
     return jsonify({"id": provider_id}), 201
 
+@app.route("/provider/<id>", methods=["PUT"])
+def update_provider(id):
+    data = request.get_json()
+    if not data or "name" not in data:
+        return jsonify({"error": "name is required"}), 400
+    return jsonify({"id": id, "name": data["name"]}), 200
+
 
 @app.route("/health", methods=["GET"])
 def health_check():
