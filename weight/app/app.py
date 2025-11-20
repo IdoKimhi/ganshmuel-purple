@@ -39,7 +39,7 @@ def format_row(row):
         "direction": row['direction'],
         "bruto": row['bruto'],
         "neto": row['neto'] if row['neto'] is not None else "na",
-        "produce": row['produce'],
+        "produce": row['produce'] or "na",
         "containers": row['containers'].split(',') if row['containers'] else []
     }
 
@@ -61,11 +61,11 @@ def health():
 def get_weight():
     now = datetime.now()
     default_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    start_date = parse_date(request.args.get('from'), default_start)
-    end_date = parse_date(request.args.get('to'), now)
+    t1 = parse_date(request.args.get('from'), default_start)
+    t2 = parse_date(request.args.get('to'), now)
     directions = sanitize_directions(request.args.get('filter', 'in,out,none'))
 
-    if start_date is None or end_date is None:
+    if t1 is None or t2 is None:
         return jsonify({"error": "Invalid date format. Use YYYYMMDDHHMMSS"}), 400
     if not directions:
         return jsonify({"error": "Invalid filter values"}), 400
@@ -79,7 +79,7 @@ def get_weight():
     """
     try:
         with closing(db_pool.get_connection()) as conn, closing(conn.cursor(dictionary=True)) as cursor:           
-            params = [start_date, end_date] + directions
+            params = [t1, t2] + directions
             cursor.execute(query, params)
             results = [format_row(row) for row in cursor.fetchall()]
             return jsonify(results), 200
