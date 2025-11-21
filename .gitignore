@@ -1,2 +1,105 @@
-.venv
+# ----------------------------------------------------------------------
+# 1. Operating System & Editor Files (Multi-Platform)
+# ----------------------------------------------------------------------
+
+## macOS/Linux
+.DS_Store
+.localized
+ehthumbs.db
+Thumbs.db
+
+## Windows
+Desktop.ini
+
+## Editor Metadata (VS Code, Sublime, etc.)
+.vscode/
+.sublime-workspace
+.idea/
+*.swp
+*.bak
+*.swo
+
+# ----------------------------------------------------------------------
+# 2. Python Environment & Build Artifacts
+# ----------------------------------------------------------------------
+
+## Byte-compiled / Optimized files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+
+## Python-specific environment artifacts
+venv/
+env/
 .env
+.python-version
+pip-log.txt
+pip-delete-this-file.txt
+
+## Unit test and coverage
+.coverage
+.tox/
+/htmlcov/
+*.egg
+*.egg-info/
+/dist/
+/build/
+
+# ----------------------------------------------------------------------
+# 3. Flask & Web-Specific Files
+# ----------------------------------------------------------------------
+
+## Secret or dynamic configuration files
+config_secret.py
+instance/
+config.json # If used for local secrets/DB connection strings
+
+# ----------------------------------------------------------------------
+# 4. Docker & Container Artifacts
+# ----------------------------------------------------------------------
+
+## Docker build context files
+*.log
+!docker-entrypoint.sh # Don't ignore necessary startup scripts if present
+
+## Local Docker Compose files used for testing/local secrets (if not versioned)
+# If you have a .env file for secrets, ensure it is ignored (covered above)
+docker-compose.local.yml
+
+# ----------------------------------------------------------------------
+# 5. Database Artifacts (MySQL/General)
+# ----------------------------------------------------------------------
+
+## MySQL Data Dumps & Credentials
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+/data/ # For local MySQL volume data if not using Docker volumes
+.my.cnf # MySQL client configuration file
+
+# ----------------------------------------------------------------------
+# 6. Temporary Files
+# ----------------------------------------------------------------------
+
+*~
+\#*
+.\#*
+
+# ----------------------------------------------------------------------
+# 7. Local Media (Usually handled by Docker volumes, but good to ignore)
+# ----------------------------------------------------------------------
+
+# If your app uploads/processes files locally during development
+/uploads/
+/media/
+
+# ----------------------------------------------------------------------
+# 8. Logs
+# ----------------------------------------------------------------------
+
+/logs/
+*.log
+>>>>>>> main
