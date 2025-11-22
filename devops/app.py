@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
-import json
-import os
+# Import the function from your new file
+from email_service import send_notification_email
 
 app = Flask(__name__)
 
@@ -8,42 +8,40 @@ app = Flask(__name__)
 def health_check():
     return "OK", 200
 
-
-@app.route("/webhookcallback", methods=["POST"])
-def hook():
-    print("Received GitHub Webhook Headers:", request.headers)
-    print("Received GitHub Webhook JSON:", request.get_json(silent=True))
-    return "Webhook Received by Flask Dev Server", 200
-
 @app.route('/trigger', methods=['POST'])
 def trigger_handler():
-#check for json content type
+    # Check for json content type
     if not request.is_json:
-        return jsonify ({"message": "Content-Type must be application/json"}), 400
+        return jsonify({"message": "Content-Type must be application/json"}), 400
 
     data = request.get_json()
+    
+    # --- GitHub Push Event Parsing ---
+    # GitHub Push events contain a 'ref' field (e.g., refs/heads/main)
+    # They do usually NOT contain an 'action' field.
+    
+    ref = data.get('ref', '')
+    pusher_data = data.get('pusher', {})
+    pusher_name = pusher_data.get('name', 'Unknown Pusher')
+    repository = data.get('repository', {})
+    html_url = repository.get('html_url', '')
 
-    action = data.get('action')
-    pusher_data = data.get('pusher')
+    print("--- GitHub Webhook Received ---")
+    print(f"Ref: {ref}")
+    print(f"Pusher: {pusher_name}")
 
-    repository_data = data.get('repository', {})
-    branches_url = repository_data.get('branches_url')
-
-    #process the extracted data
-
-    if action and pusher_data and branches_url:
-        pusher_username = pusher_data.get('name', 'N/A')
-        print("--- GitHub Webhook Received ---")
-        print(f"Action: **{action}**")
-        print(f"Pusher: **{pusher_username}**")
-        print(f"Branches URL: **{branches_url}**")
-        print("-------------------------------")
-
-        #logic goes here, if action == 'created':...
-        return jsonify({"message": "Webhook successfully processed"}), 200
+    # --- Logic: Check for 'devops' branch ---
+    if 'refs/heads/devops' in ref:
+        print(">> Detected push to 'devops' branch. Initiating email sequence...")
+        
+        # Trigger the email function from the other file
+        send_notification_email(pusher_name, html_url)
+        
+        return jsonify({"message": "Push to devops detected. Email sent."}), 200
+        
     else:
-        print(f"Error: Missing data in payload. Action: {action}, Pusher: {pusher_data is not None}, Branches URL: {branches_url}")
-        return jsonify({"message": "Missing required data in payload"}), 400
+        print(f">> Ignored: Event was for {ref}, not devops.")
+        return jsonify({"message": "Event received but ignored (not devops branch)"}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)
