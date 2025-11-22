@@ -7,11 +7,10 @@ services:
       context: .
       dockerfile: dockerfile
 
-    container_name: ci-server
     restart: always
 
     ports:
-    - "8000:8000"
+    - "8080:8080"
 
     #provision for docker.sock
     volumes:
