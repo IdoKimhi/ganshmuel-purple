@@ -8,6 +8,7 @@ app = Flask(__name__)
 def health_check():
     return "OK", 200
 
+
 @app.route('/trigger', methods=['POST'])
 def trigger_handler():
 #check for json content type
