@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime
 from flask import Flask, request, jsonify, redirect
 from contextlib import closing
@@ -90,6 +91,119 @@ def get_weight():
     except Exception as e:
         app.logger.error(f"Unexpected Error: {e}")
         return jsonify({"error": "Internal server error"}), 500
-   
+
+@app.route('/weight', methods=['POST'])
+def post_weight():
+    # 1. Input Parsing
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
+        
+    direction = data.get('direction')
+    truck = data.get('truck', 'na')
+    containers = data.get('containers', '')  # Example: "C-101,C-102"
+    weight_input = int(data.get('weight'))
+    unit = data.get('unit', 'kg')
+    produce = data.get('produce', 'na')
+
+    if direction not in ['in', 'out', 'none']:
+        return jsonify({"error": "Invalid direction"}), 400
+
+    # 2. Unit Conversion (Always store in KG)
+    weight_kg = int(weight_input * 0.453592) if unit == 'lbs' else weight_input
+
+    try:
+        # We use the pool exactly like your team did in get_weight
+        with closing(db_pool.get_connection()) as conn, closing(conn.cursor(dictionary=True)) as cursor:
+            
+            # --- LOGIC A: Direction IN ---
+            if direction == 'in':
+                # Generate a unique Session ID (using integer timestamp)
+                session_id = int(time.time())
+                
+                query = """
+                    INSERT INTO transactions 
+                    (direction, truck, containers, bruto, produce, datetime, session_id) 
+                    VALUES (%s, %s, %s, %s, %s, NOW(), %s)
+                """
+                cursor.execute(query, (direction, truck, containers, weight_kg, produce, session_id))
+                conn.commit() # <--- CRITICAL: You must commit writes!
+                
+                return jsonify({
+                    "id": cursor.lastrowid, 
+                    "truck": truck, 
+                    "bruto": weight_kg
+                }), 201
+
+            # --- LOGIC B: Direction OUT ---
+            elif direction == 'out':
+                # Find the last 'in' record for this truck
+                cursor.execute("""
+                    SELECT * FROM transactions 
+                    WHERE truck = %s AND direction = 'in' 
+                    ORDER BY datetime DESC LIMIT 1
+                """, (truck,))
+                last_in = cursor.fetchone()
+
+                if not last_in:
+                    return jsonify({"error": "No previous 'in' record found for truck"}), 404
+
+                # Calculate Logic
+                bruto_in = last_in['bruto']
+                truck_tara = weight_kg  # Current weight is empty truck
+                
+                # Calculate Container Weight from DB lookup
+                total_container_weight = 0
+                neto = 0 
+                
+                if containers:
+                    container_list = containers.split(',')
+                    # Create placeholders based on number of containers
+                    format_strings = ','.join(['%s'] * len(container_list))
+                    
+                    # Get sum of weights
+                    cursor.execute(f"SELECT sum(weight) as total, count(*) as count FROM containers_registered WHERE container_id IN ({format_strings})", tuple(container_list))
+                    result = cursor.fetchone()
+                    
+                    # If we found fewer containers in DB than requested, some are unknown
+                    if result['count'] != len(container_list):
+                        neto = None # "na"
+                    else:
+                        total_container_weight = result['total'] if result['total'] else 0
+                        neto = bruto_in - truck_tara - total_container_weight
+                else:
+                    neto = bruto_in - truck_tara
+
+                # Save OUT record linked to SAME session_id
+                session_id = last_in['session_id']
+                query = """
+                    INSERT INTO transactions 
+                    (direction, truck, containers, truckTara, neto, produce, datetime, session_id) 
+                    VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
+                """
+                cursor.execute(query, (direction, truck, containers, truck_tara, neto, produce, session_id))
+                conn.commit() # <--- CRITICAL: You must commit writes!
+
+                return jsonify({
+                    "id": cursor.lastrowid,
+                    "truck": truck,
+                    "bruto": bruto_in,
+                    "truckTara": truck_tara,
+                    "neto": neto if neto is not None else "na"
+                }), 201
+
+            # --- LOGIC C: Direction NONE ---
+            else:
+                session_id = int(time.time())
+                cursor.execute("INSERT INTO transactions (direction, bruto, datetime, session_id) VALUES (%s, %s, NOW(), %s)", 
+                             (direction, weight_kg, session_id))
+                conn.commit()
+                return jsonify({"id": cursor.lastrowid, "bruto": weight_kg}), 201
+
+    except mysql.connector.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
