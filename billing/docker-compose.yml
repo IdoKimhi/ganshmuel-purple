@@ -13,8 +13,7 @@ services:
     volumes:
       - billing_db_data:/var/lib/mysql
       - ./billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
-    networks:
-      - purple_network
+
 
   billing:
     image: lironsaada/billing.svc:2
