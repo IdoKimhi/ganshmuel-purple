@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # Service 1: The Database
+  weight-db:
+    image: mysql:8.0
+    container_name: weight-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      # Critical: Must match the 'CREATE DATABASE weight' in SQL file
+      MYSQL_DATABASE: weight
+    volumes:
+      # Maps local SQL file to the container's startup folder
+      - ./weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
+      # Persist data so it doesn't vanish when you restart
+      - weight_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    ports:
+      - "3306:3306"
+
+  # Service 2: Python API
+  weight-app:
+    build: ./weight
+    container_name: weight-app
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      # Live Reload: Maps local 'app' folder to the container's '/app' folder
+      - ./weight/app:/app
+      - ./weight/in:/in
+    depends_on:
+      weight-db:
+        condition: service_healthy
+    environment:
+      # Connection details for the python code
+      DB_HOST: weight-db
+      DB_USER: root
+      DB_PASSWORD: password
+      # Critical: Must match the MYSQL_DATABASE above
+      DB_NAME: weight
+
+volumes:
+  weight_data:
