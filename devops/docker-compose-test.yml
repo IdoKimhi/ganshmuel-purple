@@ -12,6 +12,7 @@ services:
       service: weight-db
     networks:
       - purple_network
+    network_mode: ""  # איפוס
 
   weight-app:
     extends:
@@ -19,6 +20,7 @@ services:
       service: weight-app
     networks:
       - purple_network
+    network_mode: ""  # איפוס
 
   billing-db:
     extends:
@@ -26,6 +28,7 @@ services:
       service: billing-db
     networks:
       - purple_network
+    network_mode: ""  # איפוס
 
   billing:
     extends:
@@ -33,3 +36,4 @@ services:
       service: billing
     networks:
       - purple_network
+    network_mode: ""  # איפוס
