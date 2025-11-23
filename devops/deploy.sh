@@ -8,7 +8,8 @@ echo "Branch from webhook: $BRANCH"
 # Always update ALL project code
 echo "Pulling latest code..."
 git fetch --all
-git pull --rebase
+git checkout devops
+git pull origin $BRANCH
 
 # Create network for services
 echo "Ensuring network exists..."
