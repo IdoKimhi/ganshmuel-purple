@@ -21,10 +21,18 @@ def trigger_handler():
         return jsonify({"message": "Content-Type must be application/json"}), 400
 
     data = request.get_json()
-    action = data.get('action')
-    pusher_data = data.get('pusher')
+    
+    pusher_data = data.get('pusher', {})
+    pusher_username = pusher_data.get('name', 'N/A') 
+
+    # 2. Safely extract ref and determine branch
+    ref = data.get("ref", "")            # e.g. "refs/heads/dev"
+    branch = ref.split("/")[-1] if ref.startswith("refs/heads/") else "unknown"
+    
+    # Extract other data needed for logging (optional data is okay to be processed later)
+    action = data.get('action', 'N/A')
     repository_data = data.get('repository', {})
-    branches_url = repository_data.get('branches_url')
+    branches_url = repository_data.get('branches_url', 'N/A')
 
     #process the extracted data
 

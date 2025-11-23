@@ -9,7 +9,7 @@ echo "1. Getting latest changes from Git..."
 # Use git pull --rebase to fetch new changes and update local files.
 # This is CRITICAL for self-update, as it pulls the new code (including the new app.py)
 # before the Docker image is rebuilt.
-git pull --rebase || { echo "ERROR: Git pull failed. Stopping startup process."; exit 1; }
+git pull --rebase && chmod +x ci.sh || { echo "ERROR: Git pull failed. Stopping startup process."; exit 1; }
 
 # Assuming the compose files are in a 'devops' subdirectory relative to where ci.sh is executed.
 CI_COMPOSE="devops/docker-compose-ci-server.yml"
