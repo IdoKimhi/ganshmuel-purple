@@ -96,8 +96,8 @@ def create_app() -> Flask:
         """
         POST /provider
         Body JSON: { "name": "<provider-name>" }
-        - name must be unique.
-        Returns: 201 { "id": "<str>" }
+        - name must be unique (by app logic).
+        Returns: 201 { "id": "<str>" } or 409 on duplicate name.
         """
         data = request.get_json(silent=True) or {}
         name = data.get("name")
@@ -108,16 +108,26 @@ def create_app() -> Flask:
         try:
             conn = get_db_connection()
             with conn.cursor() as cur:
+                # 1. Check if a provider with this name already exists
+                cur.execute("SELECT id FROM Provider WHERE name = %s", (name,))
+                row = cur.fetchone()
+                if row is not None:
+                    return jsonify(
+                        {"error": "provider with that name already exists"}
+                    ), 409
+
+                # 2. Insert new provider
                 sql = "INSERT INTO Provider (name) VALUES (%s)"
                 cur.execute(sql, (name,))
                 provider_id = cur.lastrowid
-            conn.close()
-        except IntegrityError:
-            return jsonify({"error": "provider with that name already exists"}), 409
         except Exception as e:
             return jsonify({"error": "database error", "details": str(e)}), 500
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
-        # Spec shows id as <str>
         return jsonify({"id": str(provider_id)}), 201
 
     @app.route("/provider/<int:provider_id>", methods=["PUT"])
@@ -237,6 +247,40 @@ def create_app() -> Flask:
 
         return jsonify({"inserted": len(rates)}), 201
 
+
+    @app.route("/rates", methods=["GET"])
+    def download_rates():
+        """
+        GET /rates
+        Returns current rates as an Excel file.
+        """
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT product_id, rate, scope FROM Rates")
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+
+        # Create in-memory Excel workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Rates"
+        ws.append(["Product", "Rate", "Scope"])
+
+        for r in rows:
+            ws.append([r["product_id"], r["rate"], r["scope"]])
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name="rates.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
     # ---------------------------------------------------------------
     # Trucks: POST /truck, PUT /truck/<id>, GET /truck/<id>
