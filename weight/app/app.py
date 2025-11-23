@@ -4,11 +4,15 @@ import csv
 import json
 from datetime import datetime
 from contextlib import closing
-from flask import Flask, request, jsonify, redirect
+from flask import Flask, request, jsonify, redirect, send_from_directory
+from flask_cors import CORS
 import mysql.connector
 from mysql.connector import pooling
 
 app = Flask(__name__)
+
+# Enable CORS for frontend access
+CORS(app)
 
 # Enable pretty-printed JSON responses for better readability
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -76,7 +80,10 @@ def validate_weight_input(data):
         return None, jsonify({"error": "Truck cannot be empty or whitespace"}), 400
 
     if not produce or not isinstance(produce, str) or produce.strip() == "":
-        return None, jsonify({"error": "Produce cannot be empty or whitespace"}), 400
+        # Produce is optional for OUT and NONE directions
+        if direction == 'in':
+            return None, jsonify({"error": "Produce cannot be empty or whitespace"}), 400
+        produce = "na"  # Default for OUT/NONE
 
     # Containers are mandatory for IN/OUT (but can be empty for NONE)
     if direction in ['in', 'out']:
@@ -125,6 +132,7 @@ def format_transaction_row(row):
     return {
         "id": row['id'],
         "direction": row['direction'],
+        "truck": row['truck'] or "na",
         "bruto": row['bruto'],
         "neto": row['neto'] if row['neto'] is not None else "na",
         "produce": row['produce'] or "na",
@@ -133,7 +141,13 @@ def format_transaction_row(row):
 
 @app.route('/')
 def index():
-    return redirect('/weight')
+    """Serve the frontend application."""
+    return send_from_directory('static', 'index.html')
+
+@app.route('/static/<path:path>')
+def serve_static(path):
+    """Serve static files (CSS, JS)."""
+    return send_from_directory('static', path)
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -243,7 +257,7 @@ def get_weight():
 
     placeholders = ','.join(['%s'] * len(directions))
     query = f"""
-        SELECT id, direction, bruto, neto, produce, containers 
+        SELECT id, direction, truck, bruto, neto, produce, containers 
         FROM transactions 
         WHERE datetime BETWEEN %s AND %s AND direction IN ({placeholders})
         ORDER BY datetime DESC
