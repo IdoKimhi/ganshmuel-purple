@@ -18,7 +18,6 @@ services:
     - /var/run/docker.sock:/var/run/docker.sock
     - ../:/app_root:rw 
 
-
-    working_dir: /app_root
+    working_dir: /app_root/devops
 
     command: ["python", "app.py"]
