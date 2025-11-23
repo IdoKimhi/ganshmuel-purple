@@ -15,46 +15,45 @@ volumes:
 services:
 
   weight-db:
-  env_file:
-    - ../weight/.env                        # ← נטען ראשון
-  environment:
-    MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-    MYSQL_DATABASE: ${MYSQL_DATABASE}       # ← מקבל ערכים מתוך ה־env_file
-  extends:
-    file: ../weight/docker-compose.yml
-    service: weight-db                      # ← נטען אחרי שהמשתנים קיימים
-  networks:
-    - purple_network
-
-
-  weight-app:
-    extends:
-      file: ../weight/docker-compose.yml
-      service: weight-app
     env_file:
       - ../weight/.env
-    environment:                       # ← חובה גם פה
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    extends:
+      file: ../weight/docker-compose.yml
+      service: weight-db
+    networks:
+      - purple_network
+
+  weight-app:
+    env_file:
+      - ../weight/.env
+    environment:
       DB_HOST: ${DB_HOST}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: weight
+    extends:
+      file: ../weight/docker-compose.yml
+      service: weight-app
     networks:
       - purple_network
 
   billing-db:
+    env_file:
+      - ../billing/.env
     extends:
       file: ../billing/docker-compose.yml
       service: billing-db
-    env_file:
-      - ../billing/.env
     networks:
       - purple_network
 
   billing:
+    env_file:
+      - ../billing/.env
     extends:
       file: ../billing/docker-compose.yml
       service: billing
-    env_file:
-      - ../billing/.env
     networks:
       - purple_network
