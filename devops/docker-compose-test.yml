@@ -4,6 +4,11 @@ networks:
   purple_network:
     driver: bridge
 
+  # רק כדי להרגיע את Docker – לא באמת נשתמש בה
+  billing_network:
+    external: true
+    name: purple_network   # טריק: מכוון לרשת האמיתית
+
 services:
 
   weight-db:
@@ -12,7 +17,6 @@ services:
       service: weight-db
     networks:
       - purple_network
-    network_mode: ""  # איפוס
 
   weight-app:
     extends:
@@ -20,7 +24,6 @@ services:
       service: weight-app
     networks:
       - purple_network
-    network_mode: ""  # איפוס
 
   billing-db:
     extends:
@@ -28,7 +31,6 @@ services:
       service: billing-db
     networks:
       - purple_network
-    network_mode: ""  # איפוס
 
   billing:
     extends:
@@ -36,4 +38,3 @@ services:
       service: billing
     networks:
       - purple_network
-    network_mode: ""  # איפוס
