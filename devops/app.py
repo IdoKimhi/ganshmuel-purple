@@ -8,13 +8,6 @@ app = Flask(__name__)
 def health_check():
     return "OK", 200
 
-
-@app.route("/webhookcallback", methods=["POST"])
-def hook():
-    print("Received GitHub Webhook Headers:", request.headers)
-    print("Received GitHub Webhook JSON:", request.get_json(silent=True))
-    return "Webhook Received by Flask Dev Server", 200
-
 @app.route('/trigger', methods=['POST'])
 def trigger_handler():
 #check for json content type
