@@ -10,7 +10,6 @@ import json
 
 app = Flask(__name__)
 
-# Database connection configuration, Dev's, Please set .env variables accordingly :)
 db_pool = pooling.MySQLConnectionPool(
     pool_name="weight_pool",
     pool_size=5,
@@ -19,7 +18,7 @@ db_pool = pooling.MySQLConnectionPool(
     password=os.environ.get('DB_PASSWORD'),  
     host=os.environ.get('DB_HOST'),          
     database=os.environ.get('DB_NAME'), 
-    port=int(os.environ.get('DB_PORT', 3306))
+    port=int(os.environ['DB_PORT'])
 )
 
 def parse_date(date_str, default):
