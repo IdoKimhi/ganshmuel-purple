@@ -18,7 +18,7 @@ services:
     extends:
       file: ../weight/docker-compose.yml
       service: weight-db
-      env_file:
+    env_file:
       - ../weight/.env
     networks:
       - purple_network
