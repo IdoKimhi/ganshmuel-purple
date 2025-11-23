@@ -31,7 +31,6 @@ __pycache__/
 
 ## Python-specific environment artifacts
 venv/
-.venv
 env/
 .env
 .python-version

@@ -57,6 +57,80 @@ def health():
         return "OK", 200
     except Exception:
         return "Failure", 500
+    
+@app.route('/item/<id>', methods=['GET'])
+def get_item(id):
+    now = datetime.now()
+    default_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    t1 = parse_date(request.args.get('from'), default_start)
+    t2 = parse_date(request.args.get('to'), now)
+    print(t1, t2)
+
+    if t1 is None or t2 is None:
+        return jsonify({"error": "Invalid date format. Use YYYYMMDDHHMMSS"}), 400
+    
+
+    if t1 > t2:
+        return jsonify({"error": "'from' must be earlier than 'to'"}), 400
+
+    
+    try:
+        with closing(db_pool.get_connection()) as conn, closing(conn.cursor(dictionary=True)) as cursor:
+
+            cursor.execute(
+                "SELECT 1 FROM transactions WHERE truck = %s LIMIT 1",
+                (id,))
+            is_truck = cursor.fetchone() is not None
+
+            cursor.execute(
+                "SELECT weight FROM containers_registered WHERE container_id = %s LIMIT 1",
+                (id,))
+            container_row = cursor.fetchone()
+            is_registered_container = container_row is not None
+
+            cursor.execute("""SELECT 1 FROM transactions WHERE FIND_IN_SET(%s, REPLACE(containers, ' ', '')) > 0 LIMIT 1""", (id,))
+            is_container_in_transactions = cursor.fetchone() is not None
+
+            is_container = is_registered_container or is_container_in_transactions
+
+            if not is_truck and not is_container:
+                return jsonify({"error": "Item not found"}), 404
+
+            tara_val = "na"
+
+            if is_truck:
+                cursor.execute("""SELECT truckTara FROM transactions WHERE truck = %s AND truckTara IS NOT NULL
+                                ORDER BY datetime DESC LIMIT 1""", (id,))
+                last_tara = cursor.fetchone()
+                tara_val = last_tara["truckTara"] if last_tara else "na"
+
+                cursor.execute("""
+                    SELECT DISTINCT session_id FROM transactions WHERE truck = %s AND datetime BETWEEN %s AND %s
+                    ORDER BY session_id DESC""", (id, t1, t2))
+
+            else:
+                tara_val = container_row["weight"] if container_row and container_row["weight"] is not None else "na"
+
+                cursor.execute("""
+                    SELECT DISTINCT session_id FROM transactions WHERE FIND_IN_SET(%s, REPLACE(containers, ' ', '')) > 0
+                      AND datetime BETWEEN %s AND %s ORDER BY session_id DESC""", (id, t1, t2))
+
+            sessions = [row["session_id"] for row in cursor.fetchall()]
+
+            return jsonify({
+                "id": id,
+                "tara": tara_val,
+                "sessions": sessions
+            }), 200
+
+    except mysql.connector.Error as e:
+        app.logger.error(f"DB Error in /item/{id}: {e}")
+        return jsonify({"error": "Database error"}), 500
+    except Exception as e:
+        app.logger.error(f"Unexpected Error in /item/{id}: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+    
+
 
 @app.route('/weight', methods=['GET'])
 def get_weight():
