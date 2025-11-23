@@ -2,7 +2,7 @@ services:
   # Service 1: The Database
   weight-db:
     image: mysql:8.0
-    container_name: weight-db
+    container_name: ${DB_HOST}
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -37,8 +37,10 @@ services:
       DB_HOST: ${DB_HOST}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: weight
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_PORT: 3306
     networks:
+      - default
       - purple_network
 
 volumes:
