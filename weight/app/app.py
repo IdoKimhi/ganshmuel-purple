@@ -5,6 +5,8 @@ from flask import Flask, request, jsonify, redirect
 from contextlib import closing
 import mysql.connector
 from mysql.connector import pooling
+import csv
+import json
 
 app = Flask(__name__)
 
@@ -204,6 +206,143 @@ def post_weight():
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
+    
+@app.route('/session', defaults={'id': None}, methods=['GET'])
+@app.route('/session/<id>', methods=['GET'])
+def get_session(id):
+    def _serialize_session(row):
+        resp = {
+            "id": str(row['session_id']),
+            "truck": row['truck'] or "na",
+            "bruto": row['bruto']
+        }
+        if row['direction'] == 'out':
+            resp['truckTara'] = row['truckTara']
+            resp['neto'] = row['neto'] if row['neto'] is not None else "na"
+        else:
+             resp['status'] = 'active'
+        return resp
+
+
+@app.route('/batch-weight', methods=['POST'])
+def batch_weight():
+    # Get the filename from the request
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
+        
+    filename = data.get('file')
+    if not filename:
+        return jsonify({"error": "No filename provided"}), 400
+    
+    # Locate the file in the /in folder (Mapped Volume)
+    filepath = os.path.join('/in', filename)
+    if not os.path.exists(filepath):
+        return jsonify({"error": f"File {filename} not found in /in folder"}), 404
+
+    success_count = 0
+    
+    try:
+        # Connect to DB
+        with closing(db_pool.get_connection()) as conn, closing(conn.cursor()) as cursor:
+            
+            # Determine file type
+            file_ext = filename.split('.')[-1].lower()
+            
+            if file_ext == 'json':
+                with open(filepath, 'r') as f:
+                    records = json.load(f)
+                    for item in records:
+                        # Extract fields
+                        c_id = item.get('id')
+                        w = int(item.get('weight'))
+                        u = item.get('unit', 'kg')
+                        
+                        # Convert to KG if needed
+                        final_w = int(w * 0.453592) if u == 'lbs' else w
+                        
+                        # Save to DB (REPLACE prevents duplicates)
+                        cursor.execute("REPLACE INTO containers_registered (container_id, weight, unit) VALUES (%s, %s, 'kg')", (c_id, final_w))
+                        success_count += 1
+
+            elif file_ext == 'csv':
+                with open(filepath, 'r') as f:
+                    reader = csv.reader(f)
+                    rows = list(reader)
+                    
+                    # Skip header if present
+                    start_idx = 0
+                    if rows and rows[0][0].lower() in ['id', 'container_id', 'unit', 'weight']:
+                        start_idx = 1
+                    
+                    for row in rows[start_idx:]:
+                        if len(row) < 2: continue # Skip empty rows
+                        
+                        # CSV Format expected: id, weight, [unit]
+                        c_id = row[0]
+                        w = int(row[1])
+                        
+                        # Default to kg, check 3rd column if it exists
+                        u = 'kg'
+                        if len(row) > 2:
+                            u = row[2].lower()
+                        
+                        # Convert to KG
+                        final_w = int(w * 0.453592) if u == 'lbs' else w
+                        
+                        cursor.execute("REPLACE INTO containers_registered (container_id, weight, unit) VALUES (%s, %s, 'kg')", (c_id, final_w))
+                        success_count += 1
+
+            # commit the transaction
+            conn.commit()
+            return jsonify({"accepted": success_count}), 200
+
+    except ValueError as e:
+        return jsonify({"error": f"Data format error: {str(e)}"}), 400
+    except mysql.connector.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+
+
+    try:
+        with closing(db_pool.get_connection()) as conn, \
+             closing(conn.cursor(dictionary=True)) as cursor:
+            
+            if id:
+                query = """
+                    SELECT session_id, truck, bruto, truckTara, neto, direction 
+                    FROM transactions 
+                    WHERE session_id = %s 
+                    ORDER BY datetime DESC 
+                    LIMIT 1
+                """
+                cursor.execute(query, (id,))
+                row = cursor.fetchone()
+
+                if not row:
+                    return jsonify({"error": "Session not found"}), 404
+
+                return jsonify(_serialize_session(row)), 200
+
+            else:
+                query = """
+                    SELECT session_id, truck, bruto, truckTara, neto, direction 
+                    FROM transactions 
+                    WHERE direction = 'out'
+                """
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                
+                results = [_serialize_session(row) for row in rows]
+                
+                return jsonify(results), 200
+
+    except Exception as e:
+        app.logger.error(f"Error getting session: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+    
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
