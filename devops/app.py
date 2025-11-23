@@ -1,11 +1,14 @@
 from flask import Flask, request, jsonify
 # Import the function from your new file
 from email_service import send_notification_email, send_simple_alert_email
+from self_update import trigger_update_async 
 import json
 import os
 import subprocess
+import threading
 
 app = Flask(__name__)
+
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -36,6 +39,19 @@ def trigger_handler():
     branch = ref.split("/")[-1] if ref else "unknown"
     print(f"Branch pushed: {branch}")
 
+    #TEST self_update upon push to dev
+    if branch == 'dev':
+        print(">>> DEV branch push detected. Triggering CI self-update and redeployment...")
+        
+        # Call the imported service function to handle the shutdown/restart asynchronously
+        trigger_update_async() 
+
+        # Return success immediately while the server tears itself down in the background.
+        return jsonify({
+            "message": f"CI Self-Update for branch '{branch}' initiated by {pusher_username}. Server will restart shortly.",
+            "status": "restarting"
+        }), 200
+        
 #    try:
  #       print(f"Running deploy script for branch: {branch}")
   #      result = subprocess.run(
@@ -87,6 +103,9 @@ def mail_test():
     except Exception as e:
         print(f"Error during email send: {e}")
         return jsonify({"message": f"Failed to send test email: {str(e)}"}), 500
+
+#run production
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)
