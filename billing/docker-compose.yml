@@ -16,7 +16,7 @@ services:
 
 
   billing:
-    image: lironsaada/billing.svc:2
+    image: lironsaada/billing.svc:3
     container_name: billing
     restart: always
     depends_on:
