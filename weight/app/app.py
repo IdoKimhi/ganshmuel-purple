@@ -173,32 +173,77 @@ def post_weight():
     direction = data.get('direction')
     truck = data.get('truck', 'na')
     containers = data.get('containers', '')  # Example: "C-101,C-102"
-    weight_input = int(data.get('weight'))
-    unit = data.get('unit', 'kg')
+    unit = (data.get('unit', 'kg') or 'kg').lower()
     produce = data.get('produce', 'na')
+    force = bool(data.get('force', False))  
 
     if direction not in ['in', 'out', 'none']:
         return jsonify({"error": "Invalid direction"}), 400
 
+    if unit not in ['kg', 'lbs']:  
+        return jsonify({"error": "Invalid unit"}), 400
+
+    if data.get('weight') is None:
+        return jsonify({"error": "Invalid weight"}), 400
+    try:
+        weight_input = float(data.get('weight'))
+        if weight_input <= 0:
+            return jsonify({"error": "Invalid weight"}), 400
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid weight"}), 400
+
     # 2. Unit Conversion (Always store in KG)
-    weight_kg = int(weight_input * 0.453592) if unit == 'lbs' else weight_input
+    weight_kg = int(weight_input * 0.453592) if unit == 'lbs' else int(weight_input)
+
+    # Normalize containers (remove spaces, empty parts) 
+    containers_norm = containers.replace(" ", "")
+    container_list = [c for c in containers_norm.split(',') if c]
+    containers_norm_str = ",".join(container_list)
+
+    # Disallow IN/OUT without containers
+    if direction in ['in', 'out'] and not container_list:
+        return jsonify({"error": "Containers required for truck"}), 400
+
 
     try:
-        # We use the pool exactly like your team did in get_weight
         with closing(db_pool.get_connection()) as conn, closing(conn.cursor(dictionary=True)) as cursor:
-            
+
+            if direction == 'none' and truck != 'na':
+                return jsonify({"error": "Direction 'none' cannot have a truck"}), 400
+
+            # Fetch last transaction for this truck (only for a truck)
+            last_tx = None
+            if truck != 'na':
+                cursor.execute("""
+                    SELECT * FROM transactions WHERE truck = %s ORDER BY datetime DESC, id DESC
+                    LIMIT 1""", (truck,))
+                last_tx = cursor.fetchone()
+
+            # force rules - if same direction as last without force, block
+            # else - overwrite last same-direction record
+            if last_tx and last_tx['direction'] == direction and direction in ['in', 'out']:
+                if not force:
+                    return jsonify({"error": f"'{direction}' after '{direction}' not allowed without force"}), 409
+                
+                # overwrite previous weigh: delete last same-direction record
+                cursor.execute("DELETE FROM transactions WHERE id = %s", (last_tx['id'],))
+                conn.commit()
+
+            # 'none' after 'in' is not allowed - because if 'in' is provided it must be a truck
+            if direction == 'none' and last_tx and last_tx['direction'] == 'in' and not force:
+                return jsonify({"error": "'none' after 'in' is not allowed"}), 409
+
             # --- LOGIC A: Direction IN ---
             if direction == 'in':
-                # Generate a unique Session ID (using integer timestamp)
                 session_id = int(time.time())
-                
+
                 query = """
                     INSERT INTO transactions 
                     (direction, truck, containers, bruto, produce, datetime, session_id) 
                     VALUES (%s, %s, %s, %s, %s, NOW(), %s)
                 """
-                cursor.execute(query, (direction, truck, containers, weight_kg, produce, session_id))
-                conn.commit() # <--- CRITICAL: You must commit writes!
+                cursor.execute(query, (direction, truck, containers_norm_str, weight_kg, produce, session_id))
+                conn.commit()
                 
                 return jsonify({
                     "id": cursor.lastrowid, 
@@ -210,50 +255,72 @@ def post_weight():
             elif direction == 'out':
                 # Find the last 'in' record for this truck
                 cursor.execute("""
-                    SELECT * FROM transactions 
-                    WHERE truck = %s AND direction = 'in' 
-                    ORDER BY datetime DESC LIMIT 1
+                    SELECT * FROM transactions WHERE truck = %s AND direction = 'in' ORDER BY datetime DESC, id DESC LIMIT 1
                 """, (truck,))
                 last_in = cursor.fetchone()
 
+                # Ensure there is a previous 'in' record
                 if not last_in:
-                    return jsonify({"error": "No previous 'in' record found for truck"}), 404
+                    return jsonify({"error": "No previous 'in' record found for truck"}), 409  # ✅ changed to 409
 
-                # Calculate Logic
                 bruto_in = last_in['bruto']
-                truck_tara = weight_kg  # Current weight is empty truck
-                
-                # Calculate Container Weight from DB lookup
-                total_container_weight = 0
-                neto = 0 
-                
-                if containers:
-                    container_list = containers.split(',')
-                    # Create placeholders based on number of containers
-                    format_strings = ','.join(['%s'] * len(container_list))
-                    
-                    # Get sum of weights
-                    cursor.execute(f"SELECT sum(weight) as total, count(*) as count FROM containers_registered WHERE container_id IN ({format_strings})", tuple(container_list))
-                    result = cursor.fetchone()
-                    
-                    # If we found fewer containers in DB than requested, some are unknown
-                    if result['count'] != len(container_list):
-                        neto = None # "na"
-                    else:
-                        total_container_weight = result['total'] if result['total'] else 0
-                        neto = bruto_in - truck_tara - total_container_weight
-                else:
-                    neto = bruto_in - truck_tara
+                truck_tara = weight_kg
 
-                # Save OUT record linked to SAME session_id
+                #prevent OUT twice for same session (force overwrite)
                 session_id = last_in['session_id']
+                cursor.execute("""
+                    SELECT id FROM transactions WHERE session_id = %s AND truck = %s AND direction = 'out'
+                    LIMIT 1""", (session_id, truck))
+                prev_out = cursor.fetchone()
+                if prev_out and not force:
+                    return jsonify({"error": "OUT already exists for this session"}), 409
+                if prev_out and force:
+                    cursor.execute("DELETE FROM transactions WHERE id = %s", (prev_out['id'],))
+                    conn.commit()
+
+                # containers must match the containers from IN
+                in_containers_norm = (last_in['containers'] or '').replace(" ", "")
+                in_list = [c for c in in_containers_norm.split(',') if c]
+                if container_list != in_list and not force:
+                    return jsonify({"error": "OUT containers must match IN containers"}), 409
+
+                # Truck tara cannot exceed bruto 
+                if truck_tara > bruto_in and not force:
+                    return jsonify({"error": "Truck tara exceeds bruto"}), 409
+
+                total_container_weight = 0
+                neto = None
+
+                if container_list:
+                    format_strings = ','.join(['%s'] * len(container_list))
+                    cursor.execute(
+                        f"SELECT SUM(weight) as total, COUNT(*) as count "
+                        f"FROM containers_registered WHERE container_id IN ({format_strings})",
+                        tuple(container_list)
+                    )
+                    result = cursor.fetchone() or {"total": 0, "count": 0}
+
+                    known_weight = int(result["total"] or 0)
+
+                    # container weights + truck tara cannot exceed bruto even if some container weights are unknown
+                    if truck_tara > bruto_in - known_weight and not force:
+                        return jsonify({"error": "Tara too high vs containers"}), 409
+
+                    if result['count'] == len(container_list):
+                        # all known → compute neto
+                        neto = bruto_in - truck_tara - known_weight
+                    else:
+                        # some unknown → neto = na
+                        neto = None
+     
+
                 query = """
                     INSERT INTO transactions 
                     (direction, truck, containers, truckTara, neto, produce, datetime, session_id) 
                     VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
                 """
-                cursor.execute(query, (direction, truck, containers, truck_tara, neto, produce, session_id))
-                conn.commit() # <--- CRITICAL: You must commit writes!
+                cursor.execute(query, (direction, truck, containers_norm_str, truck_tara, neto, produce, session_id))
+                conn.commit()
 
                 return jsonify({
                     "id": cursor.lastrowid,
@@ -266,15 +333,18 @@ def post_weight():
             # --- LOGIC C: Direction NONE ---
             else:
                 session_id = int(time.time())
-                cursor.execute("INSERT INTO transactions (direction, bruto, datetime, session_id) VALUES (%s, %s, NOW(), %s)", 
-                             (direction, weight_kg, session_id))
+                cursor.execute("""
+                    INSERT INTO transactions (direction, bruto, datetime, session_id)
+                    VALUES (%s, %s, NOW(), %s)
+                """, (direction, weight_kg, session_id))
                 conn.commit()
-                return jsonify({"id": cursor.lastrowid, "bruto": weight_kg}), 201
+                return jsonify({"id": cursor.lastrowid, "truck": "na", "bruto": weight_kg}), 201
 
     except mysql.connector.Error as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
+
     
 @app.route('/session', defaults={'id': None}, methods=['GET'])
 @app.route('/session/<id>', methods=['GET'])
