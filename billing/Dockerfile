@@ -16,6 +16,6 @@ WORKDIR /app
 
 COPY --from=builder /install /usr/local
 
-COPY billing.scv.py .
+COPY billing.svc.py .
 
-CMD ["python", "billing.scv.py"]
+CMD ["python", "billing.svc.py"]
