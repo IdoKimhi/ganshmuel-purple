@@ -25,7 +25,7 @@ echo "3. Building and starting Production Environment in detached mode (-d)..."
 # This ensures the Production environment is running constantly.
 # We assume docker-compose-prod.yml exists and defines the app stack.
 docker compose -f $PROD_COMPOSE up -d --build --force-recreate
-#
+##
 echo "------------------------------------------------------"
 echo "CI Service (Port 8080) and Production Environment are now running."
 echo "------------------------------------------------------"
