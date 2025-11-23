@@ -15,43 +15,39 @@ volumes:
 services:
 
   weight-db:
-    env_file:
-      - ../weight/.env
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
     extends:
       file: ../weight/docker-compose.yml
       service: weight-db
+    env_file:
+      - ./.env
     networks:
       - purple_network
+    volumes:
+      - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
+      - weight_data:/var/lib/mysql
 
+
+  # ================================
+  #           WEIGHT APP
+  # ================================
   weight-app:
-    env_file:
-      - ../weight/.env
-    environment:
-      DB_HOST: ${DB_HOST}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: weight
     extends:
       file: ../weight/docker-compose.yml
       service: weight-app
+    env_file:
+      - ./.env
     networks:
       - purple_network
-
+  # --- BILLING DB ---
   billing-db:
-    env_file:
-      - ../billing/.env
     extends:
       file: ../billing/docker-compose.yml
       service: billing-db
     networks:
       - purple_network
 
+  # --- BILLING APP ---
   billing:
-    env_file:
-      - ../billing/.env
     extends:
       file: ../billing/docker-compose.yml
       service: billing
