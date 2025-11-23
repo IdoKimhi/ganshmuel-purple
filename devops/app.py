@@ -22,10 +22,8 @@ def trigger_handler():
         return jsonify ({"message": "Content-Type must be application/json"}), 400
 
     data = request.get_json()
-
     action = data.get('action')
     pusher_data = data.get('pusher')
-
     repository_data = data.get('repository', {})
     branches_url = repository_data.get('branches_url')
 
