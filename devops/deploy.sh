@@ -2,25 +2,37 @@
 
 BRANCH=$1
 
-echo "Running test environment..."
+echo "=== CI STARTED ==="
+echo "Branch from webhook: $BRANCH"
+
+# Always update ALL project code
+echo "Pulling latest code..."
+git fetch --all
+git pull --rebase
+
+# Create network for services
+echo "Ensuring network exists..."
+docker network create ci-network || true
+
+echo "Running TEST environment..."
 docker compose -f docker-compose.test.yml down
 docker compose -f docker-compose.test.yml up -d --build
 
 echo "Running tests..."
 if bash tests/run_tests.sh; then
     echo "Tests PASSED"
-    
 
-    if [ "$BRANCH" = "master" ]; then
+    # Only main gets deployment
+    if [ "$BRANCH" = "main" ]; then
         echo "Deploying to production..."
         docker compose -f docker-compose.prod.yml down
         docker compose -f docker-compose.prod.yml up -d --build
     fi
-    
-    python send_mail.py "Success" "$BRANCH"
+
+    python3 send_mail.py "Success" "$BRANCH"
 
 else
     echo "Tests FAILED"
-    python send_mail.py "Failure" "$BRANCH"
+    python3 send_mail.py "Failure" "$BRANCH"
     exit 1
 fi
