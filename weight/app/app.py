@@ -206,6 +206,23 @@ def post_weight():
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
+    
+@app.route('/session', defaults={'id': None}, methods=['GET'])
+@app.route('/session/<id>', methods=['GET'])
+def get_session(id):
+    def _serialize_session(row):
+        resp = {
+            "id": str(row['session_id']),
+            "truck": row['truck'] or "na",
+            "bruto": row['bruto']
+        }
+        if row['direction'] == 'out':
+            resp['truckTara'] = row['truckTara']
+            resp['neto'] = row['neto'] if row['neto'] is not None else "na"
+        else:
+             resp['status'] = 'active'
+        return resp
+
 
 @app.route('/batch-weight', methods=['POST'])
 def batch_weight():
@@ -287,6 +304,45 @@ def batch_weight():
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
+
+
+    try:
+        with closing(db_pool.get_connection()) as conn, \
+             closing(conn.cursor(dictionary=True)) as cursor:
+            
+            if id:
+                query = """
+                    SELECT session_id, truck, bruto, truckTara, neto, direction 
+                    FROM transactions 
+                    WHERE session_id = %s 
+                    ORDER BY datetime DESC 
+                    LIMIT 1
+                """
+                cursor.execute(query, (id,))
+                row = cursor.fetchone()
+
+                if not row:
+                    return jsonify({"error": "Session not found"}), 404
+
+                return jsonify(_serialize_session(row)), 200
+
+            else:
+                query = """
+                    SELECT session_id, truck, bruto, truckTara, neto, direction 
+                    FROM transactions 
+                    WHERE direction = 'out'
+                """
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                
+                results = [_serialize_session(row) for row in rows]
+                
+                return jsonify(results), 200
+
+    except Exception as e:
+        app.logger.error(f"Error getting session: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+    
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
