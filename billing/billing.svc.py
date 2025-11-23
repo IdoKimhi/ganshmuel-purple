@@ -2,7 +2,6 @@ import os
 import io
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-
 from flask import Flask, request, jsonify, send_file
 import pymysql
 from pymysql.err import IntegrityError
