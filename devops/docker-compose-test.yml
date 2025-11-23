@@ -9,8 +9,8 @@ networks:
     name: purple_network
 
 volumes:
-  weight_data:       # ← הוספנו כדי לפתור את השגיאה
-  billing_db_data:   # ← גם זה יידרש בהמשך
+  weight_data:
+  billing_db_data:
 
 services:
 
@@ -20,6 +20,9 @@ services:
       service: weight-db
     env_file:
       - ../weight/.env
+    environment:                       # ← חובה! מפעיל את המשתנים
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
     networks:
       - purple_network
 
@@ -29,6 +32,11 @@ services:
       service: weight-app
     env_file:
       - ../weight/.env
+    environment:                       # ← חובה גם פה
+      DB_HOST: ${DB_HOST}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: weight
     networks:
       - purple_network
 
@@ -36,6 +44,8 @@ services:
     extends:
       file: ../billing/docker-compose.yml
       service: billing-db
+    env_file:
+      - ../billing/.env
     networks:
       - purple_network
 
@@ -43,5 +53,7 @@ services:
     extends:
       file: ../billing/docker-compose.yml
       service: billing
+    env_file:
+      - ../billing/.env
     networks:
       - purple_network
