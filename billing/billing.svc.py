@@ -77,15 +77,7 @@ def create_app() -> Flask:
     # ---------------------------------------------------------------
     @app.route("/health", methods=["GET"])
     def health():
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
-            conn.close()
-            return "OK", 200
-        except Exception as e:
-            # Failure of Weight is NOT relevant for Billing health
-            return jsonify({"status": "Failure", "details": str(e)}), 500
+        return "OK", 200
 
     # ---------------------------------------------------------------
     # Providers
