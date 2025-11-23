@@ -4,7 +4,7 @@ recipient_config.env
 __pycache__/
 *.pyc
 # ----------------------------------------------------------------------
-# 1. Operatingdd System & Editor Files (Multi-Platform)
+# 1. Opseratingdd System & Editor Files (Multi-Platform)
 # ----------------------------------------------------------------------
 
 ## macOS/Linux
