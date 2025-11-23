@@ -16,6 +16,4 @@ COPY app.py .
 
 EXPOSE 8080
 
-ENV FLASK_APP=app.py
-
 CMD ["python3", "app.py"]

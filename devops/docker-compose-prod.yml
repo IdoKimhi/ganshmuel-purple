@@ -1,9 +1,10 @@
-version: "3.9"
+include:
+  - docker-compose-prod.yml
 
 services:
 
   weight:
-    build: ./weight
+    build: ../weight
     container_name: weight-prod
     environment:
       DB_HOST: weight-db
@@ -23,7 +24,7 @@ services:
       - weight-db-prod-data:/var/lib/mysql
 
   billing:
-    build: ./billing
+    build: ../billing
     container_name: billing-prod
     environment:
       DB_HOST: billing-db

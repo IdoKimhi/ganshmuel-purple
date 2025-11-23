@@ -1,7 +1,6 @@
-version: '3.8'
 
 services:
-  ci-server:
+  ci_server:
   #instructs docker compose to build an an image from devops/dockerfile
     build:
       context: .
@@ -11,10 +10,9 @@ services:
 
     ports:
     - "8080:8080"
-    environment:
-      # Docker Compose will look for these variables in the host's shell
-      - EMAIL_USER=${EMAIL_USER}
-      - EMAIL_PASS=${EMAIL_PASS}
+    env_file:
+      - .env
+      - recipient_config.env
     #provision for docker.sock
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock

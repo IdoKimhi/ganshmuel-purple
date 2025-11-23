@@ -32,12 +32,14 @@ def trigger_handler():
         print(f"Pusher: **{pusher_username}**")
         print(f"Branches URL: **{branches_url}**")
         print("-------------------------------")
-        
+    ref = data.get("ref", "")            # e.g. "refs/heads/devops"
+    branch = ref.split("/")[-1] if ref else "unknown"
+    print(f"Branch pushed: {branch}")
 
 #    try:
- #       print(f"Running deploy script for branch: {pusher_username}")
+ #       print(f"Running deploy script for branch: {branch}")
   #      result = subprocess.run(
-   #         ["bash", "deploy.sh", pusher_username],
+   #         ["bash", "deploy.sh", branch],
     #        capture_output=True,
      #       text=True
       #  )
