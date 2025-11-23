@@ -2,7 +2,7 @@ services:
   # Service 1: The Database
   weight-db:
     image: mysql:8.0
-    container_name: ${DB_HOST}
+    container_name: weight-db
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -12,11 +12,13 @@ services:
       - ./db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
       timeout: 20s
       retries: 10
     ports:
       - "${DB_HOST_PORT}:3306"
+    networks:
+      - purple_network
 
   # Service 2: Python API
   weight-app:
@@ -37,14 +39,14 @@ services:
       DB_HOST: ${DB_HOST}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${MYSQL_DATABASE}
-      DB_PORT: 3306
+      DB_NAME: weight
+      DB_PORT: ${DB_CONTAINER_PORT}
     networks:
-      - default
       - purple_network
 
 volumes:
   weight_data:
+
 
 networks:
   purple_network:
