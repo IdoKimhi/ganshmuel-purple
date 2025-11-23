@@ -90,13 +90,65 @@ def create_app() -> Flask:
     # ---------------------------------------------------------------
     # Providers
     # ---------------------------------------------------------------
+    
     @app.route("/provider", methods=["POST"])
     def create_provider():
-        return jsonify({"id": "placeholder"}), 201
+        """
+        POST /provider
+        Body JSON: { "name": "<provider-name>" }
+        - name must be unique.
+        Returns: 201 { "id": "<str>" }
+        """
+        data = request.get_json(silent=True) or {}
+        name = data.get("name")
+
+        if not name or not isinstance(name, str):
+            return jsonify({"error": "name is required"}), 400
+
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                sql = "INSERT INTO Provider (name) VALUES (%s)"
+                cur.execute(sql, (name,))
+                provider_id = cur.lastrowid
+            conn.close()
+        except IntegrityError:
+            return jsonify({"error": "provider with that name already exists"}), 409
+        except Exception as e:
+            return jsonify({"error": "database error", "details": str(e)}), 500
+
+        # Spec shows id as <str>
+        return jsonify({"id": str(provider_id)}), 201
 
     @app.route("/provider/<int:provider_id>", methods=["PUT"])
     def update_provider(provider_id: int):
-        return jsonify({"id": provider_id, "name": "placeholder"}), 200
+        """
+        PUT /provider/<id>
+        Body JSON: { "name": "<new-name>" }
+        """
+        data = request.get_json(silent=True) or {}
+        name = data.get("name")
+
+        if not name or not isinstance(name, str):
+            return jsonify({"error": "name is required"}), 400
+
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM Provider WHERE id = %s", (provider_id,))
+                if not cur.fetchone():
+                    return jsonify({"error": "provider not found"}), 404
+
+                sql = "UPDATE Provider SET name = %s WHERE id = %s"
+                cur.execute(sql, (name, provider_id))
+            conn.close()
+        except IntegrityError:
+            return jsonify({"error": "provider with that name already exists"}), 409
+        except Exception as e:
+            return jsonify({"error": "database error", "details": str(e)}), 500
+
+        return jsonify({"id": str(provider_id), "name": name}), 200
+
 
     # ---------------------------------------------------------------
     # Rates
