@@ -13,7 +13,7 @@ def execute_self_update():
     time.sleep(1) 
     
     try:
-        command = f"cd /app_root && nohup bash {CI_SCRIPT_PATH} > /dev/null 2>&1 &"
+        command = f"cd /app_root && nohup bash {CI_SCRIPT_PATH} > /proc/1/fd/1 2>&1 &"
         
         os.system(command)
         

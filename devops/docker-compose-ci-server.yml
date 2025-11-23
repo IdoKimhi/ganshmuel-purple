@@ -17,6 +17,8 @@ services:
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     - ./:/app_root:ro
+    - ../ci.sh:/app_root/ci.sh:ro 
+
 
     working_dir: /app_root
 
