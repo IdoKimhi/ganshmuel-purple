@@ -2,7 +2,7 @@
 
 set -e
 
-BASE_URL="http://localhost:5001"
+BASE_URL="http://localhost:8088"
 PASS=0
 FAIL=0
 
@@ -41,6 +41,30 @@ run_test() {
   fi
 }
 
+wait_for_db() {
+  echo
+  echo "⏳ Waiting for Billing DB (via /provider)..."
+  for i in {1..20}; do
+    code=$(curl -s -o /dev/null -w "%{http_code}" \
+      -X POST "$BASE_URL/provider" \
+      -H "Content-Type: application/json" \
+      -d '{"name": "__db_healthcheck__"}' || echo "000")
+    code="${code: -3}"
+
+    # 201 = created (first time), 409 = already exists (subsequent runs)
+    if [[ "$code" == "201" || "$code" == "409" ]]; then
+      echo "✅ DB is ready (HTTP $code)"
+      return 0
+    fi
+
+    echo "Attempt $i: $code"
+    sleep 2
+  done
+
+  echo "❌ DB did not become ready in time"
+  return 1
+}
+
 echo "🚀 Starting docker compose..."
 docker compose up -d
 
@@ -60,6 +84,9 @@ done
 # 1. Health
 #################################
 run_test "Health check" 200 GET "$BASE_URL/health"
+
+# Extra: wait for DB to be ready (after app health is OK)
+wait_for_db
 
 #################################
 # 2. Create Provider

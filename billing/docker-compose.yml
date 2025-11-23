@@ -13,10 +13,12 @@ services:
     volumes:
       - billing_db_data:/var/lib/mysql
       - ./billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
+    networks:
+      - billing_network
 
 
   billing:
-    image: lironsaada/billing.svc:3
+    build: .
     container_name: billing
     restart: always
     depends_on:
@@ -30,15 +32,18 @@ services:
       WEIGHT_SERVICE_URL: http://weight:5000
       RATES_DIR: /in
     ports:
-      - "8088:5001"
+      - "8088:5000"
     volumes:
       - ./in:/in
     networks:
       - purple_network
+      - billing_network
 
 volumes:
   billing_db_data:
 
 networks:
   purple_network:
+    driver: bridge
+  billing_network:
     driver: bridge
