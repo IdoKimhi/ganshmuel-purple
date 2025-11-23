@@ -201,19 +201,160 @@ def create_app() -> Flask:
     # ---------------------------------------------------------------
     # Billing
     # ---------------------------------------------------------------
+    
+    def get_provider(provider_id: int) -> Optional[Dict[str, Any]]:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, name FROM Provider WHERE id = %s", (provider_id,))
+                return cur.fetchone()
+        finally:
+            conn.close()
+
+    def get_trucks_for_provider(provider_id: int) -> List[str]:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM Trucks WHERE provider_id = %s", (provider_id,))
+                rows = cur.fetchall()
+                return [row["id"] for row in rows]
+        finally:
+            conn.close()
+
+    def get_all_rates() -> List[Dict[str, Any]]:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT product_id, rate, scope FROM Rates")
+                return cur.fetchall()
+        finally:
+            conn.close()
+
+    def select_rate_for_product(
+        rates: List[Dict[str, Any]], product_id: str, provider_id: int
+    ) -> Optional[int]:
+        """
+        Scoped rate has higher precedence than ALL.
+        """
+        scoped_rate = None
+        all_rate = None
+        for r in rates:
+            if r["product_id"] != product_id:
+                continue
+            if r["scope"] == "ALL":
+                if all_rate is None:
+                    all_rate = r["rate"]
+            elif str(r["scope"]) == str(provider_id):
+                if scoped_rate is None:
+                    scoped_rate = r["rate"]
+        return scoped_rate if scoped_rate is not None else all_rate
+
     @app.route("/bill/<int:provider_id>", methods=["GET"])
     def get_bill(provider_id: int):
-        return jsonify({
-            "id": str(provider_id),
-            "name": "placeholder-provider",
-            "from": "YYYYMMDDHHMMSS",
-            "to": "YYYYMMDDHHMMSS",
-            "truckCount": 0,
-            "sessionCount": 0,
-            "products": [],
-            "total": 0,
-            "placeholder": True
-        }), 200
+        """
+        GET /bill/<id>?from=t1&to=t2
+        - id is provider id
+        Returns:
+        {
+          "id": <str>,
+          "name": <str>,
+          "from": <str>,
+          "to": <str>,
+          "truckCount": <int>,
+          "sessionCount": <int>,
+          "products": [
+            {
+              "product": <str>,
+              "count": <int>,   // number of sessions
+              "amount": <int>,  // total kg
+              "rate": <int>,    // agorot
+              "pay": <int>      // agorot
+            },
+            ...
+          ],
+          "total": <int>       // agorot
+        }
+        """
+        provider = get_provider(provider_id)
+        if not provider:
+            return jsonify({"error": "provider not found"}), 404
+
+        t1 = parse_datetime_param("from")
+        t2 = parse_datetime_param("to")
+
+        truck_ids = get_trucks_for_provider(provider_id)
+        rates = get_all_rates()
+
+        product_stats: Dict[str, Dict[str, Any]] = {}
+        total_sessions = 0
+
+        # For each truck, get sessions from Weight via GET /item/<truck>
+        for truck_id in truck_ids:
+            try:
+                item = call_weight_service(
+                    f"/item/{truck_id}", params={"from": t1, "to": t2}
+                )
+            except requests.exceptions.RequestException as e:
+                return jsonify({"error": "failed to reach Weight service", "details": str(e)}), 502
+
+            sessions = item.get("sessions") or []
+            for session_id in sessions:
+                try:
+                    session_data = call_weight_service(f"/session/{session_id}")
+                except requests.exceptions.RequestException as e:
+                    return jsonify({"error": "failed to reach Weight service", "details": str(e)}), 502
+
+                neto = session_data.get("neto")
+                if neto == "na" or neto is None:
+                    continue
+
+                try:
+                    neto_int = int(neto)
+                except (TypeError, ValueError):
+                    continue
+
+                product_id = (
+                    session_data.get("produce")
+                    or session_data.get("product")
+                )
+                if not product_id:
+                    continue
+
+                total_sessions += 1
+                if product_id not in product_stats:
+                    product_stats[product_id] = {
+                        "product": product_id,
+                        "count": 0,
+                        "amount": 0,
+                        "rate": 0,
+                        "pay": 0,
+                    }
+
+                stat = product_stats[product_id]
+                stat["count"] += 1
+                stat["amount"] += neto_int
+
+        # Apply rates, compute pay per product and total
+        total_pay = 0
+        for product_id, stat in product_stats.items():
+            rate = select_rate_for_product(rates, product_id, provider_id)
+            if rate is None:
+                rate = 0
+            stat["rate"] = int(rate)
+            stat["pay"] = int(stat["amount"]) * int(rate)
+            total_pay += stat["pay"]
+
+        response = {
+            "id": str(provider["id"]),
+            "name": provider["name"],
+            "from": t1,
+            "to": t2,
+            "truckCount": len(truck_ids),
+            "sessionCount": total_sessions,
+            "products": list(product_stats.values()),
+            "total": total_pay,
+        }
+        return jsonify(response), 200
 
     return app
 
@@ -222,4 +363,3 @@ if __name__ == "__main__":
     app = create_app()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
-
