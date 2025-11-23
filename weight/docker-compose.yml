@@ -1,0 +1,43 @@
+services:
+  # Service 1: The Database
+  weight-db:
+    image: mysql:8.0
+    container_name: weight-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: weight
+    volumes:
+      # CHANGED: Path is now local to this folder
+      - ./db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
+      - weight_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    ports:
+      - "3306:3306"
+
+  # Service 2: Python API
+  weight-app:
+    # CHANGED: Build context is now the current directory
+    build: .
+    container_name: weight-app
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      # CHANGED: Paths are now local
+      - ./app:/app
+      - ./in:/in
+    depends_on:
+      weight-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: weight-db
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: weight
+
+volumes:
+  weight_data:
