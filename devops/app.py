@@ -1,6 +1,9 @@
 from flask import Flask, request, jsonify
 # Import the function from your new file
 from email_service import send_notification_email
+import json
+import os
+import subprocess
 
 app = Flask(__name__)
 
@@ -15,33 +18,39 @@ def trigger_handler():
         return jsonify({"message": "Content-Type must be application/json"}), 400
 
     data = request.get_json()
-    
-    # --- GitHub Push Event Parsing ---
-    # GitHub Push events contain a 'ref' field (e.g., refs/heads/main)
-    # They do usually NOT contain an 'action' field.
-    
-    ref = data.get('ref', '')
-    pusher_data = data.get('pusher', {})
-    pusher_name = pusher_data.get('name', 'Unknown Pusher')
-    repository = data.get('repository', {})
-    html_url = repository.get('html_url', '')
+    action = data.get('action')
+    pusher_data = data.get('pusher')
+    repository_data = data.get('repository', {})
+    branches_url = repository_data.get('branches_url')
 
-    print("--- GitHub Webhook Received ---")
-    print(f"Ref: {ref}")
-    print(f"Pusher: {pusher_name}")
+    #process the extracted data
 
-    # --- Logic: Check for 'devops' branch ---
-    if 'refs/heads/devops' in ref:
-        print(">> Detected push to 'devops' branch. Initiating email sequence...")
+    if action and pusher_data and branches_url:
+        pusher_username = pusher_data.get('name', 'N/A')
+        print("--- GitHub Webhook Received ---")
+        print(f"Action: **{action}**")
+        print(f"Pusher: **{pusher_username}**")
+        print(f"Branches URL: **{branches_url}**")
+        print("-------------------------------")
         
-        # Trigger the email function from the other file
-        send_notification_email(pusher_name, html_url)
-        
-        return jsonify({"message": "Push to devops detected. Email sent."}), 200
-        
-    else:
-        print(f">> Ignored: Event was for {ref}, not devops.")
-        return jsonify({"message": "Event received but ignored (not devops branch)"}), 200
 
+#    try:
+ #       print(f"Running deploy script for branch: {pusher_username}")
+  #      result = subprocess.run(
+   #         ["bash", "deploy.sh", pusher_username],
+    #        capture_output=True,
+     #       text=True
+      #  )
+       # print("--- Deploy Script Output ---")
+        #print(result.stdout)
+        #print(result.stderr)
+    #except Exception as e:
+     #   print(f"Error running deploy script: {e}")
+      #  return jsonify({"message": "Error running deploy script"}), 500
+
+
+        #logic goes here, if action == 'created':...
+    return jsonify({"message": "Webhook successfully processed"}), 200
+   
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)
