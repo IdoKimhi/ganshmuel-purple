@@ -32,6 +32,7 @@ services:
     volumes:
       # Live Reload: Maps local 'app' folder to the container's '/app' folder
       - ./weight/app:/app
+      - ./weight/in:/in
     depends_on:
       weight-db:
         condition: service_healthy
