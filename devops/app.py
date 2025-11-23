@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import json
 import os
+import subprocess
 
 app = Flask(__name__)
 
@@ -30,12 +31,25 @@ def trigger_handler():
         print(f"Pusher: **{pusher_username}**")
         print(f"Branches URL: **{branches_url}**")
         print("-------------------------------")
+        
+
+#    try:
+ #       print(f"Running deploy script for branch: {pusher_username}")
+  #      result = subprocess.run(
+   #         ["bash", "deploy.sh", pusher_username],
+    #        capture_output=True,
+     #       text=True
+      #  )
+       # print("--- Deploy Script Output ---")
+        #print(result.stdout)
+        #print(result.stderr)
+    #except Exception as e:
+     #   print(f"Error running deploy script: {e}")
+      #  return jsonify({"message": "Error running deploy script"}), 500
+
 
         #logic goes here, if action == 'created':...
-        return jsonify({"message": "Webhook successfully processed"}), 200
-    else:
-        print(f"Error: Missing data in payload. Action: {action}, Pusher: {pusher_data is not None}, Branches URL: {branches_url}")
-        return jsonify({"message": "Missing required data in payload"}), 400
-
+    return jsonify({"message": "Webhook successfully processed"}), 200
+   
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)
