@@ -4,10 +4,13 @@ networks:
   purple_network:
     driver: bridge
 
-  # רק כדי להרגיע את Docker – לא באמת נשתמש בה
   billing_network:
     external: true
-    name: purple_network   # טריק: מכוון לרשת האמיתית
+    name: purple_network
+
+volumes:
+  weight_data:       # ← הוספנו כדי לפתור את השגיאה
+  billing_db_data:   # ← גם זה יידרש בהמשך
 
 services:
 
