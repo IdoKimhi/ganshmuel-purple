@@ -38,7 +38,13 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: weight
-      DB_PORT: 3306
+    networks:
+      - purple_network
 
 volumes:
   weight_data:
+
+networks:
+  purple_network:
+    name: purple_network
+    external: true
