@@ -11,7 +11,10 @@ services:
 
     ports:
     - "8080:8080"
-
+    environment:
+      # Docker Compose will look for these variables in the host's shell
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASS=${EMAIL_PASS}
     #provision for docker.sock
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
