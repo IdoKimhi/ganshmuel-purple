@@ -240,23 +240,122 @@ def create_app() -> Flask:
     # ---------------------------------------------------------------
     # Trucks
     # ---------------------------------------------------------------
+    # ---------------------------------------------------------------
+    # Trucks: POST /truck, PUT /truck/<id>, GET /truck/<id>
+    # ---------------------------------------------------------------
+
+    def provider_exists(provider_id: int) -> bool:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM Provider WHERE id = %s", (provider_id,))
+                return cur.fetchone() is not None
+        finally:
+            conn.close()
+
+    def truck_exists(truck_id: str) -> bool:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM Trucks WHERE id = %s", (truck_id,))
+                return cur.fetchone() is not None
+        finally:
+            conn.close()
+
     @app.route("/truck", methods=["POST"])
     def create_truck():
-        return jsonify({"id": "TRUCK123", "provider": 0}), 201
+        """
+        POST /truck
+        Body JSON:
+        {
+          "id": "<truck-license>",
+          "provider": <provider-id>
+        }
+        """
+        data = request.get_json(silent=True) or {}
+        truck_id = data.get("id")
+        provider_id = data.get("provider")
+
+        if not truck_id or not isinstance(truck_id, str):
+            return jsonify({"error": "id (truck license) is required"}), 400
+        if not isinstance(provider_id, int):
+            return jsonify({"error": "provider (int) is required"}), 400
+
+        if not provider_exists(provider_id):
+            return jsonify({"error": "provider not found"}), 404
+
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                sql = "INSERT INTO Trucks (id, provider_id) VALUES (%s, %s)"
+                cur.execute(sql, (truck_id, provider_id))
+            conn.close()
+        except IntegrityError:
+            return jsonify({"error": "truck with that id already exists"}), 409
+        except Exception as e:
+            return jsonify({"error": "database error", "details": str(e)}), 500
+
+        return jsonify({"id": truck_id, "provider": provider_id}), 201
 
     @app.route("/truck/<truck_id>", methods=["PUT"])
     def update_truck(truck_id: str):
-        return jsonify({"id": truck_id, "provider": 0}), 200
+        """
+        PUT /truck/<id>
+        Body JSON:
+        {
+          "provider": <provider-id>
+        }
+        """
+        data = request.get_json(silent=True) or {}
+        provider_id = data.get("provider")
+
+        if not isinstance(provider_id, int):
+            return jsonify({"error": "provider (int) is required"}), 400
+
+        if not provider_exists(provider_id):
+            return jsonify({"error": "provider not found"}), 404
+
+        if not truck_exists(truck_id):
+            return jsonify({"error": "truck not found"}), 404
+
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                sql = "UPDATE Trucks SET provider_id = %s WHERE id = %s"
+                cur.execute(sql, (provider_id, truck_id))
+            conn.close()
+        except Exception as e:
+            return jsonify({"error": "database error", "details": str(e)}), 500
+
+        return jsonify({"id": truck_id, "provider": provider_id}), 200
 
     @app.route("/truck/<truck_id>", methods=["GET"])
     def get_truck_info(truck_id: str):
-        return jsonify({
-            "id": truck_id,
-            "tara": 0,
-            "sessions": [],
-            "placeholder": True
-        }), 200
+        """
+        GET /truck/<id>?from=t1&to=t2
+        - id is the truck license. 404 if non-existent in Billing.Trucks
+        Returns:
+        {
+          "id": "<str>",
+          "tara": <int>,   // last known tara in kg
+          "sessions": [ <id1>, ... ]
+        }
+        Data is taken from Weight: GET /item/<truck_id>?from=&to=
+        """
+        if not truck_exists(truck_id):
+            return jsonify({"error": "truck not registered"}), 404
 
+        t1 = parse_datetime_param("from")
+        t2 = parse_datetime_param("to")
+
+        try:
+            data = call_weight_service(
+                f"/item/{truck_id}", params={"from": t1, "to": t2}
+            )
+        except requests.exceptions.RequestException as e:
+            return jsonify({"error": "failed to reach Weight service", "details": str(e)}), 502
+
+        return jsonify(data), 200
     # ---------------------------------------------------------------
     # Billing
     # ---------------------------------------------------------------
