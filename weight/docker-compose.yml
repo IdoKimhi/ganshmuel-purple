@@ -38,6 +38,13 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: weight
+    networks:
+      - purple_network
 
 volumes:
   weight_data:
+
+networks:
+  purple_network:
+    name: purple_network
+    external: true
