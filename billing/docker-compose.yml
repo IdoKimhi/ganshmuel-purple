@@ -9,13 +9,15 @@ services:
       MYSQL_ROOT_PASSWORD: 12345678
       MYSQL_DATABASE: billdb
     ports:
-      - "8087:3306"   # host→container so you can connect from MySQL Workbench / CLI
+      - "8087:3306"
     volumes:
       - billing_db_data:/var/lib/mysql
       - ./billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
+    networks:
+      - purple_network
 
   billing:
-    image: billing.svc:2        # <- your pre-built image name here
+    image: lironsaada/billing.svc:2
     container_name: billing
     restart: always
     depends_on:
@@ -26,12 +28,18 @@ services:
       DB_PASSWORD: 12345678
       DB_NAME: billdb
       DB_PORT: 3306
-      WEIGHT_SERVICE_URL: http://weight:5000   # will work once weight service exists
+      WEIGHT_SERVICE_URL: http://weight:5000
       RATES_DIR: /in
     ports:
-      - "8088:5001"          # access billing on localhost:5001
+      - "8088:5001"
     volumes:
-      - ./in:/in             # host folder → container /in for rates.xlsx
+      - ./in:/in
+    networks:
+      - purple_network
 
 volumes:
   billing_db_data:
+
+networks:
+  purple_network:
+    driver: bridge
