@@ -1,8 +1,4 @@
-version: "3.9"
-
-# ================================
-#     NETWORKS & VOLUMES
-# ================================
+# אין צורך ב-version (Docker מזהיר שזה מיושן)
 networks:
   purple_network:
     driver: bridge
@@ -11,9 +7,6 @@ volumes:
   weight_data:
   billing_db_data:
 
-# ================================
-#        PRODUCTION COMPOSE
-# ================================
 services:
 
   # ================================
@@ -23,17 +16,23 @@ services:
     extends:
       file: ../weight/docker-compose.yml
       service: weight-db
+
     container_name: weight-db-prod
+
+    # OVERRIDE מוחלט — רשת אחת בלבד
     networks:
       - purple_network
+
     environment:
       TZ: Asia/Jerusalem
       MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
       WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
+
     volumes:
       - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data:/var/lib/mysql
+
     ports:
       - "8081:${WEIGHT_DB_CONTAINER_PORT}"
 
@@ -44,15 +43,20 @@ services:
     extends:
       file: ../weight/docker-compose.yml
       service: weight-app
+
     container_name: weight-app-prod
+
+    # OVERRIDE מוחלט
     networks:
       - purple_network
+
     environment:
       TZ: Asia/Jerusalem
       DB_USER: ${WEIGHT_DB_USER}
       DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
       DB_HOST: ${WEIGHT_DB_HOST}
       WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
+
     ports:
       - "8082:5000"
 
@@ -63,14 +67,19 @@ services:
     extends:
       file: ../billing/docker-compose.yml
       service: billing-db
+
     container_name: billing-db-prod
+
+    # OVERRIDE מוחלט
     networks:
       - purple_network
+
     environment:
       TZ: Asia/Jerusalem
       MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}
       DB_PORT: ${BILLING_DB_PORT}
+
     ports:
       - "8083:${BILLING_DB_PORT}"
 
@@ -81,9 +90,13 @@ services:
     extends:
       file: ../billing/docker-compose.yml
       service: billing
+
     container_name: billing-app-prod
+
+    # OVERRIDE מוחלט
     networks:
       - purple_network
+
     environment:
       TZ: Asia/Jerusalem
       DB_USER: ${BILLING_DB_USER}
@@ -94,5 +107,6 @@ services:
       WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL}
       BILLING_SVC_PORT: ${BILLING_SVC_PORT}
       RATES_DIR: /app/rates
+
     ports:
       - "8084:${BILLING_SVC_PORT}"
