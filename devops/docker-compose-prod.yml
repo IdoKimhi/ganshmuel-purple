@@ -1,10 +1,8 @@
+version: "3.9"
+
 networks:
   purple_network:
     driver: bridge
-
-  billing_network:
-    external: true
-    name: purple_network
 
 volumes:
   weight_data:
@@ -16,6 +14,7 @@ services:
   #           WEIGHT DB
   # ================================
   weight-db:
+    container_name: weight-db-prod
     extends:
       file: ../weight/docker-compose.yml
       service: weight-db
@@ -29,7 +28,6 @@ services:
       MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
       DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
-      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
     ports:
       - "8081:${WEIGHT_DB_CONTAINER_PORT}"
 
@@ -37,6 +35,7 @@ services:
   #           WEIGHT APP
   # ================================
   weight-app:
+    container_name: weight-app-prod
     extends:
       file: ../weight/docker-compose.yml
       service: weight-app
@@ -47,7 +46,8 @@ services:
       DB_USER: ${WEIGHT_DB_USER}
       DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
       DB_HOST: ${WEIGHT_DB_HOST}
-      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
+      DB_NAME: ${WEIGHT_MYSQL_DATABASE}
+      DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
     ports:
       - "8082:5000"
 
@@ -55,6 +55,7 @@ services:
   #           BILLING DB
   # ================================
   billing-db:
+    container_name: billing-db-prod
     extends:
       file: ../billing/docker-compose.yml
       service: billing-db
@@ -72,6 +73,7 @@ services:
   #           BILLING APP
   # ================================
   billing:
+    container_name: billing-app-prod
     extends:
       file: ../billing/docker-compose.yml
       service: billing
