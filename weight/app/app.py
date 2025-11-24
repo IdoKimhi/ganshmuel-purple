@@ -23,12 +23,13 @@ db_pool = pooling.MySQLConnectionPool(
     pool_name="weight_pool",
     pool_size=5,
     pool_reset_session=True,
-    user=os.environ.get('DB_USER'),
-    password=os.environ.get('DB_PASSWORD'),
-    host=os.environ.get('DB_HOST'),
-    database=os.environ.get('DB_NAME'),
-    port=int(os.environ['DB_PORT'])
+    user=os.environ.get('WEIGHT_DB_USER'),
+    password=os.environ.get('WEIGHT_DB_PASSWORD'),
+    host=os.environ.get('WEIGHT_DB_HOST'),
+    database=os.environ.get('WEIGHT_MYSQL_DATABASE'),
+    port=int(os.environ.get('WEIGHT_DB_CONTAINER_PORT'))
 )
+
 
 def parse_date(date_str, default):
     """Parse date string (YYYYMMDDHHMMSS format) or return default."""
