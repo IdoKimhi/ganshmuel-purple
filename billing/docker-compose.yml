@@ -10,7 +10,7 @@ services:
       - "${BILLING_DB_HOST_PORT}:3306"
     volumes:
       - billing_db_data:/var/lib/mysql
-      - ./billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
+      - ./db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
     networks:
       - billing_network
 
