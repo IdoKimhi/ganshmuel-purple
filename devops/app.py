@@ -18,86 +18,76 @@ def health_check():
 
 @app.route('/trigger', methods=['POST'])
 def trigger_handler():
-    # Check for json content type
+    # Check for JSON content type
     if not request.is_json:
         return jsonify({"message": "Content-Type must be application/json"}), 400
 
     data = request.get_json()
     
+    # Extract metadata
     pusher_data = data.get('pusher', {})
-    pusher_username = pusher_data.get('name', 'N/A') 
+    pusher_username = pusher_data.get('name', 'UNKNOWN_USER')
+
     ref = data.get("ref", "")
     branch = ref.split("/")[-1] if ref.startswith("refs/heads/") else "unknown"
+
     action = data.get('action', 'N/A')
     repository_data = data.get('repository', {})
     branches_url = repository_data.get('branches_url', 'N/A')
 
-    #process the extracted data
-
-    if action and pusher_data and branches_url:
-        pusher_username = pusher_data.get('name', 'N/A')
-        print("--- GitHub Webhook Received ---")
-        print(f"Action: **{action}**")
-        print(f"Pusher: **{pusher_username}**")
-        print(f"Branches URL: **{branches_url}**")
-        print("-------------------------------")
-    ref = data.get("ref", "")            # e.g. "refs/heads/devops"
-    branch = ref.split("/")[-1] if ref else "unknown"
+    # Logging for visibility
+    print("--- GitHub Webhook Received ---")
+    print(f"Action: {action}")
+    print(f"Pusher: {pusher_username}")
     print(f"Branch pushed: {branch}")
+    print(f"Branches URL: {branches_url}")
+    print("-------------------------------")
 
-    #TEST team mail upon push to dev
+    # ============================================================
+    # SPECIAL BEHAVIOR FOR BRANCH 'dev' (Send DevOps Team Email)
+    # ============================================================
     if branch == 'dev':
-        
-        # 1. Load DevOps emails directly from environment variables
-        # This list will be the actual recipients
         DEVOPS_EMAILS = [e.strip() for e in os.getenv('DEVOPS_TEAM_EMAILS', '').split(',') if e.strip()]
-        
+
         if not DEVOPS_EMAILS:
             print("ERROR: DEVOPS_TEAM_EMAILS is not configured. Cannot send production email.")
-            return jsonify({
-                "message": f"Code pushed to '{branch}' by {pusher_username}. Configuration error: DEVOPS_TEAM_EMAILS not found.",
-            }), 200
+        else:
+            print(f"Sending production alert to DevOps team: {DEVOPS_EMAILS}")
+            try:
+                send_team_notification(
+                    branch_name=branch,
+                    pusher_username=pusher_username,
+                    recipient_emails=DEVOPS_EMAILS
+                )
+                print("Production notification sent to DevOps team successfully!")
+            except Exception as e:
+                print(f"ERROR: Failed to send DevOps team notification: {e}")
 
-        try:
-            # 2. Call the production-ready function with the actual email list
-            send_team_notification(
-                branch_name=branch, 
-                pusher_username=pusher_username, 
-                recipient_emails=DEVOPS_EMAILS
-            )
-            
-            notification_message = f"Code was pushed into '{branch}' initiated by {pusher_username}. Production notification sent to DevOps Team."
-            
-            return jsonify({
-                "message": notification_message,
-            }), 200
-        
-        except Exception as e:
-            print(f"ERROR: Failed to send DevOps team notification: {e}")
-            return jsonify({
-                "message": f"Code pushed, but failed to send DevOps notification. Error: {str(e)}",
-            }), 200
-
- 
-        
+    # ============================================================
+    # RUN CI PIPELINE (deploy.sh)
+    # ============================================================
     try:
         print(f"Running deploy script for branch: {branch}")
         result = subprocess.run(
             ["bash", "deploy.sh", branch],
-    #
             capture_output=True,
             text=True
         )
+
         print("--- Deploy Script Output ---")
         print(result.stdout)
         print(result.stderr)
+
     except Exception as e:
         print(f"Error running deploy script: {e}")
         return jsonify({"message": "Error running deploy script"}), 500
 
-
-        #logic goes here, if action == 'created':...
-    return jsonify({"message": "Webhook successfully processed"}), 200
+    # ============================================================
+    # FINAL RESPONSE
+    # ============================================================
+    return jsonify({
+        "message": f"Webhook successfully processed for branch '{branch}' by user '{pusher_username}'."
+    }), 200
 
 @app.route('/mailtest', methods=['POST'])
 def mail_test():
