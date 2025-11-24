@@ -1,5 +1,8 @@
 version: "3.9"
 
+# ================================
+#     NETWORKS & VOLUMES
+# ================================
 networks:
   purple_network:
     driver: bridge
@@ -11,7 +14,6 @@ volumes:
 # ================================
 #        PRODUCTION COMPOSE
 # ================================
-
 services:
 
   # ================================
@@ -91,17 +93,6 @@ services:
       DB_PORT: ${BILLING_DB_PORT}
       WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL}
       BILLING_SVC_PORT: ${BILLING_SVC_PORT}
-      RATES_DIR: /app/rates                 # <-- חובה! כדי לא ליפול
+      RATES_DIR: /app/rates
     ports:
       - "8084:${BILLING_SVC_PORT}"
-
-# ================================
-#        NETWORKS & VOLUMES
-# ================================
-networks:
-  purple_network:
-    driver: bridge
-
-volumes:
-  weight_data:
-  billing_db_data:
