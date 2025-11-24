@@ -1,0 +1,51 @@
+include:
+  - docker-compose-prod.yml
+
+services:
+
+  weight:
+    build: ../weight
+    container_name: weight-prod
+    environment:
+      DB_HOST: weight-db
+      DB_USER: root
+      DB_PASS: root
+    volumes:
+      - ./prod_data/weight_in:/in
+    ports:
+      - "8085:5000"
+
+  weight-db:
+    image: mysql:8
+    container_name: weight-db-prod
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - weight-db-prod-data:/var/lib/mysql
+
+  billing:
+    build: ../billing
+    container_name: billing-prod
+    environment:
+      DB_HOST: billing-db
+      DB_USER: root
+      DB_PASS: root
+    ports:
+      - "8086:5000"
+    volumes:
+      - ./prod_data/billing_in:/in
+    depends_on:
+      - billing-db
+      - weight
+
+  billing-db:
+    image: mysql:8
+    container_name: billing-db-prod
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - billing-db-prod-data:/var/lib/mysql
+
+volumes:
+  weight-db-prod-data:
+  billing-db-prod-data:

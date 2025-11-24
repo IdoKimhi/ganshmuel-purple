@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+
+  weight:
+    build: ./weight
+    container_name: weight-test
+    environment:
+      DB_HOST: weight-db
+      DB_USER: root
+      DB_PASS: root
+    ports:
+      - "8081:5000"
+    volumes:
+      - ./test_data/weight_in:/in
+
+  weight-db:
+    image: mysql:8
+    container_name: weight-db-test
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "8082:8082"
+    volumes:
+      - weight-db-test-data:/var/lib/mysql
+
+  billing:
+    build: ./billing
+    container_name: billing-test
+    environment:
+      DB_HOST: billing-db
+      DB_USER: root
+      DB_PASS: root
+    ports:
+      - "8083:5000"
+    volumes:
+      - ./test_data/billing_in:/in
+    depends_on:
+      - billing-db
+      - weight  # Billing חייב לדבר עם Weight
+
+  billing-db:
+    image: mysql:8
+    container_name: billing-db-test
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "8084:8084"
+    volumes:
+      - billing-db-test-data:/var/lib/mysql
+
+volumes:
+  weight-db-test-data:
+  billing-db-test-data:
