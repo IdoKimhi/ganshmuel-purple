@@ -69,10 +69,11 @@ def trigger_handler():
     try:
         print(f"Running deploy script for branch: {branch}")
         result = subprocess.run(
-            ["bash", "/home/ubuntu/ganshmuel-purple/devops/deploy.sh", branch],
-            capture_output=True,
-            text=True
-        )
+    ["bash", "/app_root/devops/deploy.sh", branch],
+    capture_output=True,
+    text=True
+)
+
 
         print("--- Deploy Script Output ---")
         print(result.stdout)
