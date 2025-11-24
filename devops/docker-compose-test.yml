@@ -24,6 +24,8 @@ services:
     volumes:
       - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data:/var/lib/mysql
+    environment:
+      - TZ=Asia/Jerusalem
 
 
   # ================================
@@ -37,6 +39,8 @@ services:
       - ../weight/.env
     networks:
       - purple_network
+    environment:
+      - TZ=Asia/Jerusalem
   # --- BILLING DB ---
   billing-db:
     extends:
@@ -46,6 +50,8 @@ services:
       - ../billing/.env
     networks:
       - purple_network
+    environment:
+      - TZ=Asia/Jerusalem
 
   # --- BILLING APP ---
   billing:
@@ -56,3 +62,5 @@ services:
       - ../billing/.env
     networks:
       - purple_network
+    environment:
+      - TZ=Asia/Jerusalem
