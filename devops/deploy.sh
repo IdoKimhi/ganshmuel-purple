@@ -27,11 +27,19 @@ if [ "$BRANCH" = "weight" ]; then
 
 elif [ "$BRANCH" = "billing" ]; then
     TEST_SCRIPTS=("../billing/test_billing.sh")
+elif [ "$BRANCH" ="dev"]; then
+    TEST_SCRIPTS=(
+        "../weight/verify_weight_api.py"
+        "../billing/test_billing.sh"
+        # "tests/e2e_test_flow.py"
+    )
 
 elif [ "$BRANCH" = "main" ]; then
     TEST_SCRIPTS=(
         "../weight/verify_weight_api.py"
         "../billing/test_billing.sh"
+        # "tests/e2e_test_flow.py"
+
     )
 
 else
@@ -39,6 +47,8 @@ else
     TEST_SCRIPTS=(
         "../weight/verify_weight_api.py"
         "../billing/test_billing.sh"
+        # "tests/e2e_test_flow.py"
+
     )
 fi
 
