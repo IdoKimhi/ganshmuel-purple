@@ -21,7 +21,7 @@ DB_CONFIG = {
 }
 
 # Base URL of Weight service, e.g. "http://weight:5000"
-WEIGHT_SERVICE_URL = os.environ.get("WEIGHT_SERVICE_URL", "http://weight:5000")
+WEIGHT_SERVICE_URL = os.environ.get("WEIGHT_SERVICE_URL", "http://weight:8086")
 
 # Directory inside container where rates files live (mounted volume)
 RATES_DIR = os.environ.get("RATES_DIR", "/in")
