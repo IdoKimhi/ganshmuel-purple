@@ -13,25 +13,26 @@ volumes:
 
 services:
 
+  # ================================
+  #           WEIGHT DB
+  # ================================
   weight-db:
     extends:
       file: ../weight/docker-compose.yml
       service: weight-db
-    #env_file:
-    #  - ../weight/.env
     networks:
       - purple_network
     volumes:
       - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data:/var/lib/mysql
-    environment:
-    TZ: Asia/Jerusalem
-    MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
-    MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
-    DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
-
+    environment: # <-- Correctly defined:
+      TZ: Asia/Jerusalem # <-- All variables are indented under this line
+      MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
+      DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
     ports:
       - ${WEIGHT_DB_HOST_PORT}:${WEIGHT_DB_CONTAINER_PORT}
+      
   # ================================
   #           WEIGHT APP
   # ================================
@@ -39,29 +40,26 @@ services:
     extends:
       file: ../weight/docker-compose.yml
       service: weight-app
-    #env_file:
-    #  - ../weight/.env
     networks:
       - purple_network
-    environment:
-    TZ: Asia/Jerusalem
-    DB_USER: ${WEIGHT_DB_USER}
-    DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
-    DB_HOST: ${WEIGHT_DB_HOST}      
+    environment: # <-- Correctly defined:
+      TZ: Asia/Jerusalem # <-- All variables are indented under this line
+      DB_USER: ${WEIGHT_DB_USER}
+      DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
+      DB_HOST: ${WEIGHT_DB_HOST}      
+      
   # --- BILLING DB ---
   billing-db:
     extends:
       file: ../billing/docker-compose.yml
       service: billing-db
-    #env_file:
-    #  - ../billing/.env
     networks:
       - purple_network
-    environment:
-    TZ: Asia/Jerusalem
-    MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
-    MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}   
-    DB_PORT: ${BILLING_DB_PORT}
+    environment: # <-- Correctly defined:
+      TZ: Asia/Jerusalem # <-- All variables are indented under this line
+      MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}   
+      DB_PORT: ${BILLING_DB_PORT}
     ports:
       - ${BILLING_DB_HOST_PORT}:${BILLING_DB_PORT}           
 
@@ -70,18 +68,16 @@ services:
     extends:
       file: ../billing/docker-compose.yml
       service: billing
-    #env_file:
-    #  - ../billing/.env
     networks:
       - purple_network
-    environment:
-    TZ: Asia/Jerusalem
-    DB_USER: ${BILLING_DB_USER}
-    DB_PASSWORD: ${BILLING_DB_PASSWORD}
-    DB_HOST: ${BILLING_DB_HOST}
-    DB_NAME: ${BILLING_DB_NAME}
-    DB_PORT: ${BILLING_DB_PORT}
-    WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL} # Cross-service dependency
-    BILLING_SVC_PORT: ${BILLING_SVC_PORT}  
+    environment: # <-- Correctly defined:
+      TZ: Asia/Jerusalem # <-- All variables are indented under this line
+      DB_USER: ${BILLING_DB_USER}
+      DB_PASSWORD: ${BILLING_DB_PASSWORD}
+      DB_HOST: ${BILLING_DB_HOST}
+      DB_NAME: ${BILLING_DB_NAME}
+      DB_PORT: ${BILLING_DB_PORT}
+      WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL}
+      BILLING_SVC_PORT: ${BILLING_SVC_PORT}  
     ports:
-      - ${BILLING_HOST_PORT}:${BILLING_SVC_PORT}     
+      - ${BILLING_HOST_PORT}:${BILLING_SVC_PORT}
