@@ -5,6 +5,10 @@ BRANCH=$1
 echo "=== CI STARTED ==="
 echo "Branch from webhook: $BRANCH"
 
+echo "Loading environment variables..."
+source ../weight/.env 
+source ../billing/.env
+
 echo "Pulling latest code..."
 git fetch --all
 git pull origin "$BRANCH"
