@@ -8,87 +8,100 @@ volumes:
   weight_data:
   billing_db_data:
 
+# ================================
+#        PRODUCTION COMPOSE
+# ================================
+
 services:
 
   # ================================
   #           WEIGHT DB
   # ================================
-  weight-db-prod:
-    image: mysql:8.0
+  weight-db:
+    extends:
+      file: ../weight/docker-compose.yml
+      service: weight-db
     container_name: weight-db-prod
-    restart: always
     networks:
       - purple_network
     environment:
+      TZ: Asia/Jerusalem
       MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
-      TZ: Asia/Jerusalem
+      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
     volumes:
       - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data:/var/lib/mysql
     ports:
-      - "8081:3306"
+      - "8081:${WEIGHT_DB_CONTAINER_PORT}"
 
   # ================================
   #           WEIGHT APP
   # ================================
-  weight-app-prod:
-    build: ../weight
+  weight-app:
+    extends:
+      file: ../weight/docker-compose.yml
+      service: weight-app
     container_name: weight-app-prod
-    restart: always
     networks:
       - purple_network
     environment:
+      TZ: Asia/Jerusalem
       DB_USER: ${WEIGHT_DB_USER}
       DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
-      DB_HOST: weight-db-prod
-      DB_NAME: ${WEIGHT_MYSQL_DATABASE}
-      DB_PORT: 3306
-      TZ: Asia/Jerusalem
+      DB_HOST: ${WEIGHT_DB_HOST}
+      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
     ports:
       - "8082:5000"
-    depends_on:
-      - weight-db-prod
 
   # ================================
   #           BILLING DB
   # ================================
-  billing-db-prod:
-    image: mysql:8.0
+  billing-db:
+    extends:
+      file: ../billing/docker-compose.yml
+      service: billing-db
     container_name: billing-db-prod
-    restart: always
     networks:
       - purple_network
     environment:
+      TZ: Asia/Jerusalem
       MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}
-      TZ: Asia/Jerusalem
-    volumes:
-      - ../billing/db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql
-      - billing_db_data:/var/lib/mysql
+      DB_PORT: ${BILLING_DB_PORT}
     ports:
-      - "8083:3306"
+      - "8083:${BILLING_DB_PORT}"
 
   # ================================
   #           BILLING APP
   # ================================
-  billing-app-prod:
-    build: ../billing
+  billing:
+    extends:
+      file: ../billing/docker-compose.yml
+      service: billing
     container_name: billing-app-prod
-    restart: always
     networks:
       - purple_network
     environment:
+      TZ: Asia/Jerusalem
       DB_USER: ${BILLING_DB_USER}
       DB_PASSWORD: ${BILLING_DB_PASSWORD}
-      DB_HOST: billing-db-prod
+      DB_HOST: ${BILLING_DB_HOST}
       DB_NAME: ${BILLING_DB_NAME}
-      DB_PORT: 3306
-      WEIGHT_SERVICE_URL: http://weight-app-prod:5000
-      TZ: Asia/Jerusalem
-      BILLING_SVC_PORT: 5000
+      DB_PORT: ${BILLING_DB_PORT}
+      WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL}
+      BILLING_SVC_PORT: ${BILLING_SVC_PORT}
+      RATES_DIR: /app/rates                 # <-- חובה! כדי לא ליפול
     ports:
-      - "8084:5000"
-    depends_on:
-      - billing-db-prod
-      - weight-app-prod
+      - "8084:${BILLING_SVC_PORT}"
+
+# ================================
+#        NETWORKS & VOLUMES
+# ================================
+networks:
+  purple_network:
+    driver: bridge
+
+volumes:
+  weight_data:
+  billing_db_data:
