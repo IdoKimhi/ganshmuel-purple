@@ -36,11 +36,11 @@ services:
       weight-db:
         condition: service_healthy
     environment:
-      DB_HOST: ${WEIGHT_DB_HOST}
-      DB_USER: ${WEIGHT_DB_USER}
-      DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
-      DB_NAME: weight
-      DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
+      WEIGHT_DB_HOST: ${WEIGHT_DB_HOST}
+      WEIGHT_DB_USER: ${WEIGHT_DB_USER}
+      WEIGHT_DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
+      WEIGHT_MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
+      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
     networks:
       - purple_network
 
