@@ -16,8 +16,8 @@ services:
     #provision for docker.sock
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - ./:/app_root:ro
+    - ../:/app_root:rw 
 
-    working_dir: /app_root
+    working_dir: /app_root/devops
 
     command: ["python", "app.py"]
