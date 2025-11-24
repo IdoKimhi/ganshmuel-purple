@@ -76,14 +76,6 @@ docker-compose.local.yml
 # 5. Database Artifacts (MySQL/General)
 # ----------------------------------------------------------------------
 
-## MySQL Data Dumps & Credentials
-*.sql
-*.sqlite
-*.sqlite3
-*.db
-*.dump
-/data/ # For local MySQL volume data if not using Docker volumes
-.my.cnf # MySQL client configuration file
 
 # ----------------------------------------------------------------------
 # 6. Temporary Files
