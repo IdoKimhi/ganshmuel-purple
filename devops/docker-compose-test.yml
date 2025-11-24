@@ -19,7 +19,7 @@ services:
       file: ../weight/docker-compose.yml
       service: weight-db
     env_file:
-      - ./.env
+      - ../weight/.env
     networks:
       - purple_network
     volumes:
@@ -35,7 +35,7 @@ services:
       file: ../weight/docker-compose.yml
       service: weight-app
     env_file:
-      - ./.env
+      - ../weight/.env
     networks:
       - purple_network
   # --- BILLING DB ---
@@ -43,6 +43,8 @@ services:
     extends:
       file: ../billing/docker-compose.yml
       service: billing-db
+    env_file:
+      - ../billing/.env
     networks:
       - purple_network
 
@@ -51,5 +53,7 @@ services:
     extends:
       file: ../billing/docker-compose.yml
       service: billing
+    env_file:
+      - ../billing/.env
     networks:
       - purple_network
