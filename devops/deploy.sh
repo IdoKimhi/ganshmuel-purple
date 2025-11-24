@@ -85,8 +85,8 @@ echo "✅ All tests PASSED for branch: $BRANCH"
 ###############################################
 if [ "$BRANCH" = "main" ]; then
     echo "Deploying to production..."
-    docker compose -f docker-compose.prod.yml down
-    docker compose -f docker-compose.prod.yml up -d --build
+    docker compose -f docker-compose-prod.yml down
+    docker compose -f docker-compose-prod.yml up -d --build
 fi
 
 
