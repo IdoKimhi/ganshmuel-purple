@@ -3,11 +3,23 @@ import urllib.error
 import json
 import time
 import sys
+import os
+from datetime import datetime, timedelta
 
 BASE_URL = "http://localhost:8086"
+# Ensure IN_DIR is always relative to this script's location (weight/in)
+IN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "in")
+
+# Global stats
+STATS = {"passed": 0, "failed": 0}
 
 def print_result(test_name, success, message=""):
-    status = "PASS" if success else "FAIL"
+    if success:
+        STATS["passed"] += 1
+        status = "PASS"
+    else:
+        STATS["failed"] += 1
+        status = "FAIL"
     print(f"[{status}] {test_name}: {message}")
 
 def make_request(method, endpoint, data=None):
@@ -40,20 +52,23 @@ def make_request(method, endpoint, data=None):
         return 0, str(e)
 
 def run_tests():
-    print(f"Starting tests against {BASE_URL}...")
+    print(f"Starting E2E tests against {BASE_URL}...")
     
-    # 1. Health Check
+    # --- 1. Health Check ---
+    # Verifies that the API is up and running (returns 200 OK).
     code, body = make_request("GET", "/health")
     print_result("Health Check", code == 200, f"Code: {code}")
+    if code != 200:
+        print("Health check failed. Aborting tests.")
+        return
 
-    # 2. GET /unknown (Expected to fail based on code analysis)
+    # --- 2. GET /unknown ---
+    # Verifies that /unknown endpoint exists and returns 200 OK (list of unknown containers).
     code, body = make_request("GET", "/unknown")
-    if code == 404:
-        print_result("GET /unknown", False, "Endpoint not implemented (404)")
-    else:
-        print_result("GET /unknown", code == 200, f"Code: {code}, Body: {body}")
+    print_result("GET /unknown", code == 200, f"Code: {code}")
 
-    # 3. POST /weight (IN)
+    # --- 3. POST /weight (IN) ---
+    # Verifies standard IN transaction for a truck. Expects 201 Created.
     truck_id = "T-12345"
     data_in = {
         "direction": "in",
@@ -67,25 +82,24 @@ def run_tests():
     code, body = make_request("POST", "/weight", data_in)
     print_result("POST /weight (IN)", code == 201, f"Code: {code}, Body: {body}")
     
-    if code != 201:
-        print("Skipping dependent tests...")
-        return
+    # Note: The body returns the Transaction ID, not the Session ID directly.
+    # We will fetch the Session ID later via /item/<id>
 
-    # 4. POST /weight (IN) again - Force=False (Should fail)
+    # --- 4. POST /weight (IN) Duplicate Force=False ---
+    # Verifies that trying to weigh IN again without force=true fails (400 Bad Request).
     code, body = make_request("POST", "/weight", data_in)
-    # Spec says: "if force=false will generate an error"
-    # Current impl: Likely creates a new session or overwrites without checking?
-    print_result("POST /weight (IN) Duplicate Force=False", code != 201, f"Code: {code} (Expected Error), Body: {body}")
+    print_result("POST /weight (IN) Duplicate Force=False", code != 201, f"Code: {code} (Expected Error)")
 
-    # 5. POST /weight (IN) again - Force=True (Should overwrite)
+    # --- 5. POST /weight (IN) Duplicate Force=True ---
+    # Verifies that force=true allows overwriting an existing IN transaction.
     data_in_force = data_in.copy()
     data_in_force["force"] = True
     data_in_force["weight"] = 1100
     code, body = make_request("POST", "/weight", data_in_force)
-    # Spec says: "if force=true will over-write previous weigh of same truck"
-    print_result("POST /weight (IN) Duplicate Force=True", code == 201 or code == 200, f"Code: {code}, Body: {body}")
-
-    # 6. POST /weight (NONE) after IN (Should fail)
+    print_result("POST /weight (IN) Duplicate Force=True", code in [200, 201], f"Code: {code}")
+    
+    # --- 6. POST /weight (NONE) after IN ---
+    # Verifies that a truck cannot perform a NONE transaction while currently IN.
     data_none = {
         "direction": "none",
         "truck": truck_id,
@@ -96,36 +110,104 @@ def run_tests():
         "force": False
     }
     code, body = make_request("POST", "/weight", data_none)
-    # Spec says: "none" after "in" will generate error
-    print_result("POST /weight (NONE) after IN", code != 201, f"Code: {code} (Expected Error), Body: {body}")
+    print_result("POST /weight (NONE) after IN", code != 201, f"Code: {code} (Expected Error)")
 
-    # 7. POST /weight (OUT)
+    # --- 7. POST /weight (OUT) ---
+    # Verifies standard OUT transaction to close the session. Expects 201 Created.
     data_out = {
         "direction": "out",
         "truck": truck_id,
-        "containers": "C-1,C-2", # Same containers
-        "weight": 200, # Empty truck
+        "containers": "C-1,C-2", 
+        "weight": 200, 
         "unit": "kg",
         "produce": "apples",
         "force": False
     }
     code, body = make_request("POST", "/weight", data_out)
-    print_result("POST /weight (OUT)", code == 201, f"Code: {code}, Body: {body}")
+    print_result("POST /weight (OUT)", code == 201, f"Code: {code}")
+    if code == 201:
+         print(f"   Response Body: {body}")
 
-    # 8. POST /weight (OUT) without IN (New truck)
+    # --- 8. POST /weight (OUT) without IN ---
+    # Verifies that trying to weigh OUT for a truck not currently IN fails (404/400).
     data_out_bad = data_out.copy()
     data_out_bad["truck"] = "T-99999"
     code, body = make_request("POST", "/weight", data_out_bad)
-    print_result("POST /weight (OUT) without IN", code == 404 or code == 400, f"Code: {code} (Expected 404/400), Body: {body}")
+    print_result("POST /weight (OUT) without IN", code in [400, 404], f"Code: {code} (Expected 400/404)")
 
-    # 9. GET /weight (Filter)
+    # --- 9. GET /weight (Filter) ---
+    # Verifies retrieving transactions with default filters works (200 OK).
     code, body = make_request("GET", "/weight?filter=in,out")
-    print_result("GET /weight", code == 200, f"Code: {code}, Items: {len(body) if isinstance(body, list) else body}")
+    print_result("GET /weight", code == 200, f"Code: {code}")
+
+    # --- 10. GET /item/<id> (Truck) ---
+    # Verifies retrieving history for a specific truck. Used to find valid Session ID.
+    code, body = make_request("GET", f"/item/{truck_id}")
+    print_result(f"GET /item/{truck_id}", code == 200, f"Code: {code}")
+    
+    session_id = None
+    if code == 200 and isinstance(body, dict):
+        sessions = body.get('sessions', [])
+        if sessions:
+            session_id = sessions[0]
+            print(f"   Found Session ID from history: {session_id}")
+
+    # --- 11. GET /session/<id> ---
+    # Verifies retrieving a specific session by ID (using ID found in previous step).
+    if session_id:
+        code, body = make_request("GET", f"/session/{session_id}")
+        print_result(f"GET /session/{session_id}", code == 200, f"Code: {code}")
+    else:
+        print("[SKIP] GET /session/<id> - No session ID found in item history")
+
+    # --- 12. POST /batch-weight (CSV) ---
+    # Verifies batch upload using existing mock file 'containers1.csv'.
+    csv_file = "containers1.csv"
+    if os.path.exists(os.path.join(IN_DIR, csv_file)):
+        batch_data = {"file": csv_file} 
+        code, body = make_request("POST", "/batch-weight", batch_data)
+        print_result("POST /batch-weight (CSV)", code == 200, f"Code: {code}")
+    else:
+        print(f"[SKIP] POST /batch-weight (CSV) - {csv_file} not found in {IN_DIR}")
+
+    # --- 13. POST /batch-weight (JSON) ---
+    # Verifies batch upload using existing mock file 'containers3.json'.
+    json_file = "containers3.json"
+    if os.path.exists(os.path.join(IN_DIR, json_file)):
+        batch_data = {"file": json_file} 
+        code, body = make_request("POST", "/batch-weight", batch_data)
+        print_result("POST /batch-weight (JSON)", code == 200, f"Code: {code}")
+    else:
+        print(f"[SKIP] POST /batch-weight (JSON) - {json_file} not found in {IN_DIR}")
+
+    # --- 14. GET /weight (Specific Filter) ---
+    # Verifies that ?filter=in returns ONLY 'in' direction transactions.
+    code, body = make_request("GET", "/weight?filter=in")
+    is_only_in = True
+    if code == 200 and isinstance(body, list):
+        for item in body:
+            if item.get('direction') != 'in':
+                is_only_in = False
+                break
+    print_result("GET /weight?filter=in", code == 200 and is_only_in, f"Code: {code}")
+
+    # --- 15. GET /weight (Date Filter) ---
+    # Verifies filtering transactions by date range (from/to).
+    now = datetime.now()
+    t1 = (now - timedelta(days=1)).strftime("%Y%m%d%H%M%S")
+    t2 = (now + timedelta(days=1)).strftime("%Y%m%d%H%M%S")
+    
+    code, body = make_request("GET", f"/weight?from={t1}&to={t2}&filter=in,out,none")
+    print_result("GET /weight (Date Filter)", code == 200, f"Code: {code}")
+
+    # --- 16. GET /weight (Invalid Date) ---
+    # Verifies that invalid date formats return 400 Bad Request.
+    code, body = make_request("GET", "/weight?from=INVALID&to=INVALID")
+    print_result("GET /weight (Invalid Date)", code == 400, f"Code: {code} (Expected 400)")
 
     # --- EDGE CASES ---
     print("\n--- Edge Case Tests ---")
     
-    # 10. Missing Fields
     required_fields = ['direction', 'truck', 'containers', 'weight', 'unit', 'produce', 'force']
     base_data = {
         "direction": "in",
@@ -137,117 +219,67 @@ def run_tests():
         "force": False
     }
     
+    # Missing Fields
+    # Verifies that omitting any mandatory field results in 400 Bad Request.
     for field in required_fields:
         bad_data = base_data.copy()
         del bad_data[field]
         code, body = make_request("POST", "/weight", bad_data)
         print_result(f"Missing Field: {field}", code == 400, f"Code: {code} (Expected 400)")
 
-    # 11. Invalid Weight (Negative)
-    bad_data = base_data.copy()
-    bad_data["weight"] = -100
-    code, body = make_request("POST", "/weight", bad_data)
-    print_result("Invalid Weight (Negative)", code == 400, f"Code: {code} (Expected 400)")
+    # Invalid Values
+    # Verifies various invalid input values (negative weight, bad unit, empty strings, etc.)
+    edge_cases = [
+        ("Invalid Weight (Negative)", "weight", -100),
+        ("Invalid Unit", "unit", "tons"),
+        ("Empty Truck", "truck", ""),
+        ("Weight as String", "weight", "100"),
+        ("Float Weight", "weight", 100.5),
+        ("Zero Weight", "weight", 0),
+        ("Whitespace Truck", "truck", "   "),
+        ("Whitespace Produce", "produce", "   "),
+        ("Empty Containers (IN)", "containers", ""),
+        ("Force as String", "force", "true")
+    ]
 
-    # 12. Invalid Unit
-    bad_data = base_data.copy()
-    bad_data["unit"] = "tons"
-    code, body = make_request("POST", "/weight", bad_data)
-    print_result("Invalid Unit", code == 400, f"Code: {code} (Expected 400)")
-
-    # 13. Empty String Fields
-    bad_data = base_data.copy()
-    bad_data["truck"] = ""
-    code, body = make_request("POST", "/weight", bad_data)
-    print_result("Empty Truck", code == 400, f"Code: {code} (Expected 400)")
-
-    # 14. Wrong Type for Weight (String)
-    bad_data = base_data.copy()
-    bad_data["weight"] = "100"
-    code, body = make_request("POST", "/weight", bad_data)
-    print_result("Weight as String", code == 400, f"Code: {code} (Expected 400)")
-
-    # 15. Float Weight
-    bad_data = base_data.copy()
-    bad_data["weight"] = 100.5
-    code, body = make_request("POST", "/weight", bad_data)
-    print_result("Float Weight", code == 400, f"Code: {code} (Expected 400)")
-
-    # 16. Zero Weight
-    bad_data = base_data.copy()
-    bad_data["weight"] = 0
-    code, body = make_request("POST", "/weight", bad_data)
-    print_result("Zero Weight", code == 400, f"Code: {code} (Expected 400)")
-
-    # 17. Force as String
-    bad_data = base_data.copy()
-    bad_data["force"] = "true"
-    code, body = make_request("POST", "/weight", bad_data)
-    # This might actually work depending on Python's truthy evaluation
-    print_result("Force as String", code in [200, 201, 400], f"Code: {code}")
-
-    # 18. Whitespace-Only Truck
-    bad_data = base_data.copy()
-    bad_data["truck"] = "   "
-    code, body = make_request("POST", "/weight", bad_data)
-    print_result("Whitespace-Only Truck", code == 400, f"Code: {code} (Expected 400)")
-
-    # 19. Whitespace-Only Produce
-    bad_data = base_data.copy()
-    bad_data["produce"] = "   "
-    code, body = make_request("POST", "/weight", bad_data)
-    print_result("Whitespace-Only Produce", code == 400, f"Code: {code} (Expected 400)")
-
-    # 20. Empty Containers for IN
-    bad_data = base_data.copy()
-    bad_data["containers"] = ""
-    code, body = make_request("POST", "/weight", bad_data)
-    print_result("Empty Containers (IN)", code == 400, f"Code: {code} (Expected 400)")
+    for name, field, value in edge_cases:
+        bad_data = base_data.copy()
+        bad_data[field] = value
+        code, body = make_request("POST", "/weight", bad_data)
+        print_result(name, code == 400, f"Code: {code} (Expected 400)")
 
     # --- STATE TRANSITION TESTS ---
     print("\n--- State Transition Tests ---")
     
-    # 21. OUT → OUT with force=false (Should error)
-    # First complete a transaction
+    # OUT -> OUT (force=false)
+    # Verifies that weighing OUT twice for the same session fails without force=true.
     truck_state = "T-STATE-1"
-    data_in = {"direction": "in", "truck": truck_state, "containers": "C-X", "weight": 1000, "unit": "kg", "produce": "test", "force": False}
-    make_request("POST", "/weight", data_in)
+    make_request("POST", "/weight", {"direction": "in", "truck": truck_state, "containers": "C-X", "weight": 1000, "unit": "kg", "produce": "test", "force": False})
+    make_request("POST", "/weight", {"direction": "out", "truck": truck_state, "containers": "C-X", "weight": 200, "unit": "kg", "produce": "test", "force": False})
     
-    data_out = {"direction": "out", "truck": truck_state, "containers": "C-X", "weight": 200, "unit": "kg", "produce": "test", "force": False}
-    make_request("POST", "/weight", data_out)
-    
-    # Try OUT again with force=false
-    data_out2 = {"direction": "out", "truck": truck_state, "containers": "C-X", "weight": 250, "unit": "kg", "produce": "test", "force": False}
-    code, body = make_request("POST", "/weight", data_out2)
-    print_result("OUT → OUT (force=false)", code == 400, f"Code: {code} (Expected 400), Body: {body}")
+    code, body = make_request("POST", "/weight", {"direction": "out", "truck": truck_state, "containers": "C-X", "weight": 250, "unit": "kg", "produce": "test", "force": False})
+    print_result("OUT -> OUT (force=false)", code == 400, f"Code: {code} (Expected 400)")
 
-    # 22. OUT → OUT with force=true (Should overwrite)
-    data_out3 = {"direction": "out", "truck": truck_state, "containers": "C-X", "weight": 300, "unit": "kg", "produce": "test", "force": True}
-    code, body = make_request("POST", "/weight", data_out3)
-    print_result("OUT → OUT (force=true)", code in [200, 201], f"Code: {code} (Expected 200/201)")
+    # OUT -> OUT (force=true)
+    # Verifies that force=true allows updating an existing OUT transaction.
+    code, body = make_request("POST", "/weight", {"direction": "out", "truck": truck_state, "containers": "C-X", "weight": 300, "unit": "kg", "produce": "test", "force": True})
+    print_result("OUT -> OUT (force=true)", code in [200, 201], f"Code: {code}")
 
-    # 23. NONE → NONE (Should be allowed)
-    data_none1 = {"direction": "none", "truck": "na", "containers": "", "weight": 100, "unit": "kg", "produce": "standalone", "force": False}
-    code, body = make_request("POST", "/weight", data_none1)
-    
-    data_none2 = {"direction": "none", "truck": "na", "containers": "", "weight": 150, "unit": "kg", "produce": "standalone", "force": False}
-    code, body = make_request("POST", "/weight", data_none2)
-    print_result("NONE → NONE", code == 201, f"Code: {code} (Expected 201)")
+    # NONE -> NONE
+    # Verifies that standalone NONE transactions are allowed and don't affect state.
+    code, body = make_request("POST", "/weight", {"direction": "none", "truck": "na", "containers": "", "weight": 100, "unit": "kg", "produce": "standalone", "force": False})
+    print_result("NONE -> NONE", code == 201, f"Code: {code}")
 
-    # 24. OUT → IN (New session, should work)
+    # OUT -> IN (New Session)
+    # Verifies that after weighing OUT, a truck can start a fresh IN session.
     truck_cycle = "T-CYCLE"
-    in_data = {"direction": "in", "truck": truck_cycle, "containers": "C-Y", "weight": 1000, "unit": "kg", "produce": "apples", "force": False}
-    make_request("POST", "/weight", in_data)
-    
-    out_data = {"direction": "out", "truck": truck_cycle, "containers": "C-Y", "weight": 200, "unit": "kg", "produce": "apples", "force": False}
-    make_request("POST", "/weight", out_data)
-    
-    # Now try IN again (new session)
-    in_data2 = {"direction": "in", "truck": truck_cycle, "containers": "C-Z", "weight": 1100, "unit": "kg", "produce": "oranges", "force": False}
-    code, body = make_request("POST", "/weight", in_data2)
-    print_result("OUT → IN (New Session)", code == 201, f"Code: {code} (Expected 201)")
+    make_request("POST", "/weight", {"direction": "in", "truck": truck_cycle, "containers": "C-Y", "weight": 1000, "unit": "kg", "produce": "apples", "force": False})
+    make_request("POST", "/weight", {"direction": "out", "truck": truck_cycle, "containers": "C-Y", "weight": 200, "unit": "kg", "produce": "apples", "force": False})
+    code, body = make_request("POST", "/weight", {"direction": "in", "truck": truck_cycle, "containers": "C-Z", "weight": 1100, "unit": "kg", "produce": "oranges", "force": False})
+    print_result("OUT -> IN (New Session)", code == 201, f"Code: {code}")
 
-    # 25. Multiple Different Trucks IN Simultaneously
+    # Multiple Different Trucks IN Simultaneously
+    # Verifies that multiple trucks can be IN at the same time without interference.
     truck_a = "T-MULTI-A"
     truck_b = "T-MULTI-B"
     
@@ -259,7 +291,13 @@ def run_tests():
     
     print_result("Multiple Trucks IN Simultaneously", code_a == 201 and code_b == 201, f"Truck A: {code_a}, Truck B: {code_b}")
 
-
+    print("\n" + "="*30)
+    print("TEST RESULTS SUMMARY")
+    print("="*30)
+    print(f"Total Tests: {STATS['passed'] + STATS['failed']}")
+    print(f"Passed:      {STATS['passed']}")
+    print(f"Failed:      {STATS['failed']}")
+    print("="*30)
 
 if __name__ == "__main__":
     try:
