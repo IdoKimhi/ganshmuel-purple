@@ -1,4 +1,3 @@
-version: '3.9'
 
 networks:
   purple_network:
@@ -20,6 +19,12 @@ services:
       service: weight-db
     env_file:
       - ../weight/.env
+    environment:
+      # Pass the container port variable explicitly
+      - DB_PORT=${DB_CONTAINER_PORT} 
+    ports:
+      # This resolves the DB_HOST_PORT warning when using 'extends'
+      - ${DB_HOST_PORT}:${DB_CONTAINER_PORT}     
     networks:
       - purple_network
     volumes:
