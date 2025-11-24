@@ -1,0 +1,4 @@
+[
+  { "id": "C-TEST-100", "weight": 500, "unit": "kg" },
+  { "id": "C-TEST-101", "weight": 200, "unit": "lbs" }
+]

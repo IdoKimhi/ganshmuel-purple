@@ -1,11 +1,13 @@
 from flask import Flask, request, jsonify
-# Import the function from your new file
-from email_service import send_notification_email, send_simple_alert_email
-from self_update import trigger_update_async 
+from email_service import send_notification_email, send_simple_alert_email, send_team_notification
+#from self_update import trigger_update_async 
 import json
 import os
 import subprocess
 import threading
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path='recipient_config.env')
 
 app = Flask(__name__)
 
@@ -16,67 +18,78 @@ def health_check():
 
 @app.route('/trigger', methods=['POST'])
 def trigger_handler():
-    # Check for json content type
+    # Check for JSON content type
     if not request.is_json:
         return jsonify({"message": "Content-Type must be application/json"}), 400
 
     data = request.get_json()
     
+    # Extract metadata
     pusher_data = data.get('pusher', {})
-    pusher_username = pusher_data.get('name', 'N/A') 
+    pusher_username = pusher_data.get('name', 'UNKNOWN_USER')
 
-    # 2. Safely extract ref and determine branch
-    ref = data.get("ref", "")            # e.g. "refs/heads/dev"
+    ref = data.get("ref", "")
     branch = ref.split("/")[-1] if ref.startswith("refs/heads/") else "unknown"
-    
-    # Extract other data needed for logging (optional data is okay to be processed later)
+
     action = data.get('action', 'N/A')
     repository_data = data.get('repository', {})
     branches_url = repository_data.get('branches_url', 'N/A')
 
-    #process the extracted data
-
-    if action and pusher_data and branches_url:
-        pusher_username = pusher_data.get('name', 'N/A')
-        print("--- GitHub Webhook Received ---")
-        print(f"Action: **{action}**")
-        print(f"Pusher: **{pusher_username}**")
-        print(f"Branches URL: **{branches_url}**")
-        print("-------------------------------")
-    ref = data.get("ref", "")            # e.g. "refs/heads/devops"
-    branch = ref.split("/")[-1] if ref else "unknown"
+    # Logging for visibility
+    print("--- GitHub Webhook Received ---")
+    print(f"Action: {action}")
+    print(f"Pusher: {pusher_username}")
     print(f"Branch pushed: {branch}")
+    print(f"Branches URL: {branches_url}")
+    print("-------------------------------")
 
-    #TEST self_update upon push to dev
+    # ============================================================
+    # SPECIAL BEHAVIOR FOR BRANCH 'dev' (Send DevOps Team Email)
+    # ============================================================
     if branch == 'dev':
-        print(">>> DEV branch push detected. Triggering CI self-update and redeployment...")
-        
-        # Call the imported service function to handle the shutdown/restart asynchronously
-        trigger_update_async() 
+        DEVOPS_EMAILS = [e.strip() for e in os.getenv('DEVOPS_TEAM_EMAILS', '').split(',') if e.strip()]
 
-        # Return success immediately while the server tears itself down in the background.
-        return jsonify({
-            "message": f"CI Self-Update for branch '{branch}' initiated by {pusher_username}. Server will restart shortly.",
-            "status": "restarting"
-        }), 200
-        
-#    try:
- #       print(f"Running deploy script for branch: {branch}")
-  #      result = subprocess.run(
-   #         ["bash", "deploy.sh", branch],
-    #        capture_output=True,
-     #       text=True
-      #  )
-       # print("--- Deploy Script Output ---")
-        #print(result.stdout)
-        #print(result.stderr)
-    #except Exception as e:
-     #   print(f"Error running deploy script: {e}")
-      #  return jsonify({"message": "Error running deploy script"}), 500
+        if not DEVOPS_EMAILS:
+            print("ERROR: DEVOPS_TEAM_EMAILS is not configured. Cannot send production email.")
+        else:
+            print(f"Sending production alert to DevOps team: {DEVOPS_EMAILS}")
+            try:
+                send_team_notification(
+                    branch_name=branch,
+                    pusher_username=pusher_username,
+                    recipient_emails=DEVOPS_EMAILS
+                )
+                print("Production notification sent to DevOps team successfully!")
+            except Exception as e:
+                print(f"ERROR: Failed to send DevOps team notification: {e}")
+
+    # ============================================================
+    # RUN CI PIPELINE (deploy.sh)
+    # ============================================================
+    try:
+        print(f"Running deploy script for branch: {branch}")
+        result = subprocess.run(
+    ["bash", "deploy.sh", branch],
+    cwd="/home/ubuntu/ganshmuel-purple/devops",   # <--- חובה
+    capture_output=True,
+    text=True
+)
 
 
-        #logic goes here, if action == 'created':...
-    return jsonify({"message": "Webhook successfully processed"}), 200
+        print("--- Deploy Script Output ---")
+        print(result.stdout)
+        print(result.stderr)
+
+    except Exception as e:
+        print(f"Error running deploy script: {e}")
+        return jsonify({"message": "Error running deploy script"}), 500
+
+    # ============================================================
+    # FINAL RESPONSE
+    # ============================================================
+    return jsonify({
+        "message": f"Webhook successfully processed for branch '{branch}' by user '{pusher_username}'."
+    }), 200
 
 @app.route('/mailtest', methods=['POST'])
 def mail_test():

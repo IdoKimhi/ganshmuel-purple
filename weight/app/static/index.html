@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gan Shmuel - Weight System</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <header>
+        <h1>🏭 Gan Shmuel Weight System</h1>
+    </header>
+
+    <main>
+        <!-- Weight Form Section -->
+        <section class="card">
+            <h2>Record Weight</h2>
+            <form id="weightForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="direction">Direction *</label>
+                        <select id="direction" required>
+                            <option value="">Select...</option>
+                            <option value="in">IN (Arrival)</option>
+                            <option value="out">OUT (Departure)</option>
+                            <option value="none">NONE (Standalone)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="truck">Truck ID * </label>
+                        <input type="text" id="truck" placeholder="T-12345" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="containers">Containers</label>
+                        <input type="text" id="containers" placeholder="C-12345,K-1234">
+                        <small>Comma-separated list</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="produce">Produce *</label>
+                        <input type="text" id="produce" placeholder="apples" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="weight">Weight *</label>
+                        <input type="number" id="weight" placeholder="1000" required min="1">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="unit">Unit *</label>
+                        <select id="unit" required>
+                            <option value="kg">Kilograms (kg)</option>
+                            <option value="lbs">Pounds (lbs)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="force">
+                        Force overwrite (if duplicate)
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Submit Weight</button>
+            </form>
+
+            <div id="formMessage"></div>
+        </section>
+
+        <!-- Quick Actions -->
+        <section class="card actions-card">
+            <h2>Quick Actions</h2>
+            <div class="action-buttons">
+                <button class="btn btn-secondary" onclick="getUnknownContainers()">
+                    📦 Check Unknown Containers
+                </button>
+                <button class="btn btn-secondary" onclick="refreshTransactions()">
+                    🔄 Refresh Transactions
+                </button>
+            </div>
+            <div id="unknownContainers"></div>
+        </section>
+
+        <!-- Transactions Table -->
+        <section class="card">
+            <div class="table-header">
+                <h2>Recent Transactions</h2>
+                <div class="filter-group">
+                    <label>
+                        <input type="checkbox" id="filterIn" checked onchange="refreshTransactions()"> IN
+                    </label>
+                    <label>
+                        <input type="checkbox" id="filterOut" checked onchange="refreshTransactions()"> OUT
+                    </label>
+                    <label>
+                        <input type="checkbox" id="filterNone" checked onchange="refreshTransactions()"> NONE
+                    </label>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table id="transactionsTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Direction</th>
+                            <th>Truck</th>
+                            <th>Bruto (kg)</th>
+                            <th>Neto</th>
+                            <th>Produce</th>
+                            <th>Containers</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionsBody">
+                        <tr>
+                            <td colspan="7" class="loading">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Gan Shmuel Weight System &copy; 2025</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
