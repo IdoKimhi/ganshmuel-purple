@@ -100,3 +100,4 @@ docker-compose.local.yml
 /logs/
 *.log
 
+db/
