@@ -48,7 +48,7 @@ services:
       DB_USER: ${WEIGHT_DB_USER}
       DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
       DB_HOST: ${WEIGHT_DB_HOST}      
-      
+      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
   # --- BILLING DB ---
   billing-db:
     extends:
