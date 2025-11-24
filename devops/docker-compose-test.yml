@@ -1,5 +1,3 @@
-
-
 networks:
   purple_network:
     driver: bridge
@@ -50,7 +48,9 @@ services:
       DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
       DB_HOST: ${WEIGHT_DB_HOST}      
       WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
-  # --- BILLING DB ---
+ # ================================
+  #           billing DB
+  # ================================
   billing-db:
     extends:
       file: ../billing/docker-compose.yml
@@ -65,7 +65,9 @@ services:
     ports:
       - ${BILLING_DB_HOST_PORT}:${BILLING_DB_PORT}           
 
-  # --- BILLING APP ---
+ # ================================
+  #           billing APP
+  # ================================
   billing:
     extends:
       file: ../billing/docker-compose.yml
