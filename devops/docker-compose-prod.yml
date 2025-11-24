@@ -3,6 +3,9 @@ version: "3.9"
 networks:
   purple_network:
     driver: bridge
+  billing_network:
+    driver: bridge
+
 
 volumes:
   weight_data:
