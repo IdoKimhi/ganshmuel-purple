@@ -291,6 +291,192 @@ def run_tests():
     
     print_result("Multiple Trucks IN Simultaneously", code_a == 201 and code_b == 201, f"Truck A: {code_a}, Truck B: {code_b}")
 
+    # --- ADDITIONAL EDGE CASES ---
+    print("\n--- Additional Edge Cases ---")
+    
+    # Use unique truck IDs to avoid session ID collisions (since app uses int(time.time()))
+    ts = int(time.time())
+
+    # 1. Unknown Tara Logic
+    # Scenario: Container ID not in DB. Expect 'neto': 'na'.
+    time.sleep(1.5) # Wait for unique session ID
+    truck_unknown = f"T-UNKNOWN-{ts}"
+    # IN (Use force=True to ensure clean state)
+    make_request("POST", "/weight", {"direction": "in", "truck": truck_unknown, "containers": "C-UNKNOWN-1", "weight": 5000, "unit": "kg", "produce": "mystery", "force": True})
+    # OUT
+    code, body = make_request("POST", "/weight", {"direction": "out", "truck": truck_unknown, "containers": "C-UNKNOWN-1", "weight": 2000, "unit": "kg", "produce": "mystery", "force": False})
+    
+    is_na = False
+    if code in [200, 201] and isinstance(body, dict):
+        if body.get("neto") == "na":
+            is_na = True
+    print_result("Unknown Tara (neto='na')", is_na, f"Code: {code}, Neto: {body.get('neto') if isinstance(body, dict) else 'N/A'}")
+    if not is_na:
+        print(f"   Response Body: {body}")
+
+    # 3. Container Swapping (IN vs OUT)
+    # Scenario: Truck IN with C-35434 (296kg), OUT with C-73281 (273kg).
+    time.sleep(1.5) # Wait for unique session ID
+    truck_swap = f"T-SWAP-{ts}"
+    # IN with C-35434
+    make_request("POST", "/weight", {"direction": "in", "truck": truck_swap, "containers": "C-35434", "weight": 10000, "unit": "kg", "produce": "swap_test", "force": True})
+    # OUT with C-73281
+    code, body = make_request("POST", "/weight", {"direction": "out", "truck": truck_swap, "containers": "C-73281", "weight": 2000, "unit": "kg", "produce": "swap_test", "force": False})
+    
+    print_result("Container Swapping (IN!=OUT)", code in [200, 201], f"Code: {code}")
+    if code in [200, 201]:
+        print(f"   Neto with swapped container: {body.get('neto')}")
+    else:
+        print(f"   Response Body: {body}")
+
+    # 4. Zero Net Weight
+    # Scenario: Neto = Bruto(IN) - Weight(OUT) - Tara(Containers) = 0
+    # C-35434 Tara = 296kg.
+    # Weight(OUT) [Truck Tara] = 1000kg.
+    # Bruto(IN) = 1000 + 296 = 1296kg.
+    # Neto = 1296 - 1000 - 296 = 0.
+    time.sleep(1.5) # Wait for unique session ID
+    truck_zero = f"T-ZERO-{ts}"
+    # IN - Use force=True
+    make_request("POST", "/weight", {"direction": "in", "truck": truck_zero, "containers": "C-35434", "weight": 1296, "unit": "kg", "produce": "nothing", "force": True})
+    # OUT
+    code, body = make_request("POST", "/weight", {"direction": "out", "truck": truck_zero, "containers": "C-35434", "weight": 1000, "unit": "kg", "produce": "nothing", "force": False})
+    
+    is_zero = False
+    if code in [200, 201] and isinstance(body, dict):
+        neto = body.get("neto")
+        if neto == 0 or neto == "0":
+            is_zero = True
+    print_result("Zero Net Weight", is_zero, f"Code: {code}, Neto: {body.get('neto') if isinstance(body, dict) else 'N/A'}")
+    if not is_zero:
+        print(f"   Response Body: {body}")
+
+    # --- DEEP DIVE TESTS (GET /item & GET /unknown) ---
+    print("\n--- Deep Dive Tests ---")
+
+    # Deep Dive 1: GET /unknown Format
+    # Verifies that /unknown returns a list (not just 200 OK).
+    code, body = make_request("GET", "/unknown")
+    is_list = isinstance(body, list)
+    print_result("GET /unknown returns List", is_list, f"Type: {type(body)}")
+
+    # Deep Dive 2: GET /item Non-existent ID
+    # Verifies that querying a non-existent ID returns 404.
+    fake_id = "NON_EXISTENT_ID_99999"
+    code, body = make_request("GET", f"/item/{fake_id}")
+    print_result("GET /item (Non-existent) returns 404", code == 404, f"Code: {code}")
+
+    # Deep Dive 3: GET /item Valid Keys
+    # Verifies that a valid response contains 'id', 'tara', and 'sessions' keys.
+    # Using 'truck_id' from earlier tests (T-12345).
+    code, body = make_request("GET", f"/item/{truck_id}")
+    has_keys = False
+    if code == 200 and isinstance(body, dict):
+        has_keys = all(k in body for k in ["id", "tara", "sessions"])
+    print_result("GET /item Response Keys", has_keys, f"Keys: {list(body.keys()) if isinstance(body, dict) else 'Not Dict'}")
+
+    # Deep Dive 4: GET /item Date Filter (Future)
+    # Verifies that filtering for a future date range returns an empty sessions list.
+    future_t1 = (datetime.now() + timedelta(days=300)).strftime("%Y%m%d%H%M%S")
+    future_t2 = (datetime.now() + timedelta(days=301)).strftime("%Y%m%d%H%M%S")
+    code, body = make_request("GET", f"/item/{truck_id}?from={future_t1}&to={future_t2}")
+    sessions_empty = False
+    if isinstance(body, dict):
+        sessions = body.get("sessions")
+        if isinstance(sessions, list) and len(sessions) == 0:
+            sessions_empty = True
+    print_result("GET /item Date Filter (Future)", sessions_empty, f"Sessions: {body.get('sessions') if isinstance(body, dict) else body}")
+
+    # Deep Dive 5: GET /item Invalid Date Format
+    # Verifies that invalid date format returns 400 Bad Request.
+    code, body = make_request("GET", f"/item/{truck_id}?from=INVALID_DATE")
+    print_result("GET /item Invalid Date Format", code >= 400, f"Code: {code}")
+
+    # Deep Dive 6: GET /item Impossible Range
+    # Verifies that from > to is handled gracefully (returns error).
+    t1_late = "20251231235959"
+    t2_early = "20200101000000"
+    code, body = make_request("GET", f"/item/{truck_id}?from={t1_late}&to={t2_early}")
+    print_result("GET /item Impossible Range", code >= 400, f"Code: {code}")
+
+    # Deep Dive 7: GET /item Unknown Container
+    # Verifies that an unknown container (in transactions but not registered) returns 200 with tara='na'.
+    code, body = make_request("GET", "/unknown")
+    unknown_container = None
+    if isinstance(body, list) and len(body) > 0:
+        unknown_container = body[0]
+    
+    if unknown_container:
+        code, body = make_request("GET", f"/item/{unknown_container}")
+        is_valid = False
+        if code == 200 and isinstance(body, dict):
+            if body.get("tara") == "na" and "sessions" in body:
+                is_valid = True
+        print_result("GET /item Unknown Container", is_valid, f"Container: {unknown_container}, Tara: {body.get('tara') if isinstance(body, dict) else 'N/A'}")
+    else:
+        print("[SKIP] GET /item Unknown Container - No unknown containers found")
+
+    # Deep Dive 8: GET /item Registered Container
+    # Verifies that a registered container returns 200 with numeric tara.
+    registered_container = "C-35434"  # From containers1.csv
+    code, body = make_request("GET", f"/item/{registered_container}")
+    is_valid = False
+    if code == 200 and isinstance(body, dict):
+        tara = body.get("tara")
+        if tara != "na" and isinstance(tara, (int, float)):
+            is_valid = True
+    print_result("GET /item Registered Container", is_valid, f"Container: {registered_container}, Tara: {body.get('tara') if isinstance(body, dict) else 'N/A'}")
+
+    # Deep Dive 9: GET /item Default Dates
+    # Verifies that omitting from/to uses defaults (1st of month -> now).
+    code, body = make_request("GET", f"/item/{truck_id}")
+    has_sessions = False
+    if code == 200 and isinstance(body, dict):
+        sessions = body.get("sessions")
+        if isinstance(sessions, list):
+            has_sessions = True
+    print_result("GET /item Default Dates", has_sessions, f"Code: {code}, Sessions: {body.get('sessions') if isinstance(body, dict) else 'N/A'}")
+
+    # Deep Dive 10: GET /item Partial Filter (only 'from')
+    # Verifies that providing only 'from' uses default 'to' (now).
+    past_date = "20200101000000"
+    code, body = make_request("GET", f"/item/{truck_id}?from={past_date}")
+    has_sessions = False
+    if code == 200 and isinstance(body, dict):
+        sessions = body.get("sessions")
+        if isinstance(sessions, list):
+            has_sessions = True
+    print_result("GET /item Partial Filter (from)", has_sessions, f"Code: {code}")
+
+    # Deep Dive 11: GET /item Partial Filter (only 'to')
+    # Verifies that providing only 'to' uses default 'from' (1st of month).
+    future_date = "20300101000000"
+    code, body = make_request("GET", f"/item/{truck_id}?to={future_date}")
+    has_sessions = False
+    if code == 200 and isinstance(body, dict):
+        sessions = body.get("sessions")
+        if isinstance(sessions, list):
+            has_sessions = True
+    print_result("GET /item Partial Filter (to)", has_sessions, f"Code: {code}")
+
+    # Deep Dive 12: GET /item Past Date Range (No Sessions)
+    # Verifies that a valid date range with no sessions returns empty list.
+    old_t1 = "19900101000000"
+    old_t2 = "19910101000000"
+    code, body = make_request("GET", f"/item/{truck_id}?from={old_t1}&to={old_t2}")
+    sessions_empty = False
+    if code == 200 and isinstance(body, dict):
+        sessions = body.get("sessions")
+        if isinstance(sessions, list) and len(sessions) == 0:
+            sessions_empty = True
+    print_result("GET /item Past Range (Empty)", sessions_empty, f"Sessions: {body.get('sessions') if isinstance(body, dict) else 'N/A'}")
+
+    # Deep Dive 13: GET /unknown Empty Check
+    # Verifies that /unknown returns an empty list when no unknown containers exist (or non-empty if they do).
+    code, body = make_request("GET", "/unknown")
+    is_list = isinstance(body, list)
+    print_result("GET /unknown List Type", is_list, f"Type: {type(body)}, Length: {len(body) if is_list else 'N/A'}")
+
     print("\n" + "="*30)
     print("TEST RESULTS SUMMARY")
     print("="*30)

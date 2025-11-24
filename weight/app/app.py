@@ -503,7 +503,15 @@ def get_session(id):
         with closing(db_pool.get_connection()) as conn, closing(conn.cursor(dictionary=True)) as cursor:
 
             if id:
-                cursor.execute("SELECT session_id, truck, bruto, truckTara, neto, direction FROM transactions WHERE session_id = %s ORDER BY datetime DESC LIMIT 1", (id,))
+                query = """
+                    SELECT session_id, MAX(truck) as truck, MAX(bruto) as bruto, 
+                           MAX(truckTara) as truckTara, MAX(neto) as neto, 
+                           MAX(direction) as direction 
+                    FROM transactions 
+                    WHERE session_id = %s 
+                    GROUP BY session_id
+                """
+                cursor.execute(query, (id,))
                 row = cursor.fetchone()
 
                 if not row:
@@ -511,7 +519,14 @@ def get_session(id):
 
                 return jsonify(serialize_session(row)), 200
             else:
-                cursor.execute("SELECT session_id, truck, bruto, truckTara, neto, direction FROM transactions WHERE direction = 'out'")
+                query = """
+                    SELECT session_id, MAX(truck) as truck, MAX(bruto) as bruto, 
+                           MAX(truckTara) as truckTara, MAX(neto) as neto, 
+                           MAX(direction) as direction 
+                    FROM transactions 
+                    GROUP BY session_id
+                """
+                cursor.execute(query)
                 rows = cursor.fetchall()
                 return jsonify([serialize_session(row) for row in rows]), 200
 
@@ -574,7 +589,7 @@ def batch_weight():
             conn.commit()
             return jsonify({"accepted": success_count}), 200
 
-    except ValueError as e:
+    except (ValueError, TypeError) as e:
         return jsonify({"error": f"Data format error: {str(e)}"}), 400
     except mysql.connector.Error as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
