@@ -23,11 +23,11 @@ db_pool = pooling.MySQLConnectionPool(
     pool_name="weight_pool",
     pool_size=5,
     pool_reset_session=True,
-    user=os.environ.get('WEIGHT_DB_USER'),
-    password=os.environ.get('WEIGHT_DB_PASSWORD'),
-    host=os.environ.get('WEIGHT_DB_HOST'),
-    database=os.environ.get('WEIGHT_MYSQL_DATABASE'),
-    port=int(os.environ.get('WEIGHT_DB_CONTAINER_PORT'))
+    user=os.environ.get("WEIGHT_DB_USER"),
+    password=os.environ.get("WEIGHT_DB_PASSWORD"),
+    host=os.environ.get("WEIGHT_DB_HOST"),
+    database=os.environ.get("WEIGHT_MYSQL_DATABASE"),
+    port=int(os.environ.get("WEIGHT_DB_CONTAINER_PORT"))
 )
 
 
