@@ -18,8 +18,6 @@ services:
     container_name: weight-db-prod
     networks:
       - purple_network
-    # מבטל פורטים שנמשכו מה-extends
-    ports: []
     ports:
       - "8081:3306"
     volumes:
@@ -41,8 +39,6 @@ services:
     container_name: weight-app-prod
     networks:
       - purple_network
-    # מבטל פורטים מה-extends
-    ports: []
     ports:
       - "8082:5000"
     environment:
@@ -62,10 +58,8 @@ services:
     container_name: billing-db-prod
     networks:
       - purple_network
-    # מבטל פורטים ישנים
-    ports: []
     ports:
-      - "8083:3306"
+      - "8083:${BILLING_DB_PORT}"
     environment:
       TZ: Asia/Jerusalem
       MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
@@ -82,8 +76,6 @@ services:
     container_name: billing-app-prod
     networks:
       - purple_network
-    # מבטל פורטים ישנים
-    ports: []
     ports:
       - "8084:${BILLING_SVC_PORT}"
     environment:
