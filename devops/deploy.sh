@@ -5,16 +5,18 @@ BRANCH=$1
 echo "=== CI STARTED ==="
 echo "Branch from webhook: $BRANCH"
 
-echo "Loading environment variables..."
-source ../weight/.env 
-source ../billing/.env
-
 echo "Pulling latest code..."
 git fetch --all
 git pull origin "$BRANCH"
 
 echo "Ensuring network exists..."
 docker network create ci-network || true
+
+echo "Loading environment variables for Docker Compose..."
+set -a
+source ../weight/.env
+source ../billing/.env
+set +a
 
 echo "Running TEST environment..."
 docker compose -f docker-compose-test.yml down
