@@ -71,6 +71,34 @@ def create_app() -> Flask:
         resp = requests.get(url, params=params, timeout=5)
         resp.raise_for_status()
         return resp.json()
+    
+    def get_produce_for_session(session_id: str, t1: str, t2: str) -> Optional[str]:
+        """
+        Fallback for getting the product/produce of a session when /session/<id>
+        does not return it (per the official Weight spec).
+
+        Strategy:
+        - Call GET /weight?from=t1&to=t2
+        - Look for an entry whose id matches session_id
+        - Return its 'produce' field if found
+        """
+        try:
+            weights = call_weight_service(
+                "/weight",
+                params={"from": t1, "to": t2, "filter": "in,out,none"},
+            )
+        except requests.exceptions.RequestException:
+            return None
+
+        if not isinstance(weights, list):
+            return None
+
+        for w in weights:
+            # Assuming the 'id' from GET /weight matches the session id we have
+            if str(w.get("id")) == str(session_id):
+                return w.get("produce")
+
+        return None
 
     # ---------------------------------------------------------------
     # GET /health
@@ -509,6 +537,13 @@ def create_app() -> Flask:
                     session_data.get("produce")
                     or session_data.get("product")
                 )
+
+                # If /session/<id> does NOT include produce (per official spec),
+                # fall back to GET /weight and resolve it from there.
+                if not product_id:
+                    product_id = get_produce_for_session(session_id, t1, t2)
+
+                # If we still don't know the product, skip this session
                 if not product_id:
                     continue
 
