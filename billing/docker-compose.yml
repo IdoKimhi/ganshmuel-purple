@@ -42,7 +42,7 @@ volumes:
 
 networks:
   purple_network:
-    driver: bridge
+    external: true
   billing_network:
     driver: bridge
 
