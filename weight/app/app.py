@@ -53,51 +53,74 @@ def validate_mandatory_fields(data, required_fields):
             return False, f"Missing mandatory field: {field}"
     return True, None
 
-def validate_weight_input(data):
-    """Validate POST /weight input fields and convert units to kg."""
-    direction = data['direction']
-    truck = data['truck']
-    containers = data['containers']
-    weight_input = data['weight']
-    unit = data['unit']
-    produce = data['produce']
-    force = data['force']
+def normalize_and_validate_containers(containers, direction):
+    
+    #Normalize containers string -> (container_list, containers_norm_str)
+    #IN/OUT require at least one container id, NONE may be empty
+    
+    containers_norm = (containers or "").replace(" ", "")
+    container_list = [c for c in containers_norm.split(',') if c]
+    containers_norm_str = ",".join(container_list)
 
-    # Validate direction is one of allowed values
+    if direction in ['in', 'out'] and not container_list:
+        return None, None, jsonify({"error": "Containers required for direction 'in' or 'out'"}), 400
+
+    return container_list, containers_norm_str, None, None
+
+
+def validate_weight_input(data):
+    
+    # Validate POST /weight input fields, normalize containers,convert weight to kg, force rules
+    # Returns:(direction, truck, container_list, containers_norm_str, weight_kg, produce, force),
+    # error_response, status_code
+    
+
+    direction = data['direction']
+    truck = data.get('truck', 'na')
+    containers = data.get('containers', '')
+    weight_input = data['weight']
+    unit = (data.get('unit', 'kg') or 'kg').lower()
+    produce = data.get('produce', 'na')
+    force = data.get('force', False)
+
+    # direction
     if direction not in ['in', 'out', 'none']:
         return None, jsonify({"error": "Invalid direction"}), 400
 
-    # Weight must be a positive integer
-    if not isinstance(weight_input, int) or weight_input <= 0:
-        return None, jsonify({"error": "Weight must be a positive integer"}), 400
-
-    # Only kg and lbs are supported
-    if unit not in ['kg', 'lbs']:
-        return None, jsonify({"error": "Unit must be 'kg' or 'lbs'"}), 400
-
-    # Truck and produce cannot be empty or whitespace-only
-    if not truck or not isinstance(truck, str) or truck.strip() == "":
-        return None, jsonify({"error": "Truck cannot be empty or whitespace"}), 400
-
-    if not produce or not isinstance(produce, str) or produce.strip() == "":
-        # Produce is optional for OUT and NONE directions
-        if direction == 'in':
-            return None, jsonify({"error": "Produce cannot be empty or whitespace"}), 400
-        produce = "na"  # Default for OUT/NONE
-
-    # Containers are mandatory for IN/OUT (but can be empty for NONE)
-    if direction in ['in', 'out']:
-        if not containers or not isinstance(containers, str) or containers.strip() == "":
-            return None, jsonify({"error": "Containers cannot be empty for direction 'in' or 'out'"}), 400
-
-    # Force must be boolean type, not string
+    # force must be real boolean
     if not isinstance(force, bool):
         return None, jsonify({"error": "Force must be a boolean (true/false)"}), 400
 
-    # Convert lbs to kg if needed (all weights stored in kg)
+    if unit not in ['kg', 'lbs']:
+        return None, jsonify({"error": "Unit must be 'kg' or 'lbs'"}), 400
+
+    # weight positive int
+    if not isinstance(weight_input, int) or weight_input <= 0:
+        return None, jsonify({"error": "Weight must be a positive integer"}), 400
+
+    # normalize + validate containers
+    container_list, containers_norm_str, err_resp, code = normalize_and_validate_containers(containers, direction)
+    if err_resp:
+        return None, err_resp, code
+
+    # NONE must be standalone -> truck='na'
+    if direction == 'none' and truck != 'na':
+        return None, jsonify({"error": "Direction 'none' must use truck='na'"}), 400
+
+    # truck required only for IN/OUT
+    if direction in ['in', 'out']:
+        if not truck or not isinstance(truck, str) or truck.strip() == "":
+            return None, jsonify({"error": "Truck cannot be empty or whitespace"}), 400
+
+    # produce normalize to "na" if empty
+    if not produce or not isinstance(produce, str) or produce.strip() == "":
+        produce = "na"
+
+    # convert lbs to kg
     weight_kg = int(weight_input * 0.453592) if unit == 'lbs' else weight_input
 
-    return (direction, truck, containers, weight_kg, produce, force), None, None
+    return (direction, truck, container_list, containers_norm_str, weight_kg, produce, force), None, None
+
 
 def calculate_neto(cursor, bruto_in, truck_tara, containers):
     """Calculate net weight: neto = bruto - truck_tara - sum(container_weights).
@@ -278,7 +301,7 @@ def get_weight():
 
 @app.route('/weight', methods=['POST'])
 def post_weight():
-    """Record a weight transaction (IN/OUT/NONE)."""
+    """Record a weight transaction (IN/OUT/NONE) according to spec."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Invalid JSON"}), 400
@@ -288,93 +311,176 @@ def post_weight():
     if not valid:
         return jsonify({"error": error_msg}), 400
 
-    validated_data, error_response, status_code = validate_weight_input(data)
-    if error_response:
-        return error_response, status_code
+    validated, err_resp, code = validate_weight_input(data)
+    if err_resp:
+        return err_resp, code
 
-    direction, truck, containers, weight_kg, produce, force = validated_data
+    direction, truck, container_list, containers_norm_str, weight_kg, produce, force = validated
 
     try:
         with closing(db_pool.get_connection()) as conn, closing(conn.cursor(dictionary=True)) as cursor:
 
-            # === DIRECTION: IN ===
+            # ---------------------------
+            # DIRECTION: IN
+            # ---------------------------
             if direction == 'in':
-                # Check if truck already has an open IN session
-                cursor.execute("SELECT id, session_id FROM transactions WHERE truck = %s AND direction = 'in' ORDER BY datetime DESC LIMIT 1", (truck,))
+                # last IN for truck
+                cursor.execute("""
+                    SELECT id, session_id
+                    FROM transactions
+                    WHERE truck=%s AND direction='in'
+                    ORDER BY datetime DESC, id DESC
+                    LIMIT 1
+                """, (truck,))
                 last_in = cursor.fetchone()
 
+                # if last IN is still open => IN after IN
                 if last_in and not check_session_closed(cursor, last_in['session_id']):
-                    # Truck is currently IN - check force flag
                     if not force:
-                        return jsonify({"error": "Truck already in. Use force=true to overwrite."}), 400
+                        return jsonify({"error": "Truck already in. Use force=true to overwrite."}), 409
 
-                    # Force=true: overwrite existing IN record
-                    cursor.execute("UPDATE transactions SET containers = %s, bruto = %s, produce = %s, datetime = NOW() WHERE id = %s",
-                                   (containers, weight_kg, produce, last_in['id']))
+                    # overwrite by UPDATE (keep same session)
+                    cursor.execute("""
+                        UPDATE transactions
+                        SET containers=%s, bruto=%s, produce=%s, datetime=NOW()
+                        WHERE id=%s
+                    """, (containers_norm_str, weight_kg, produce, last_in['id']))
                     conn.commit()
-                    return jsonify({"id": last_in['id'], "truck": truck, "bruto": weight_kg}), 200
 
+                    return jsonify({
+                        "id": str(last_in['id']),
+                        "truck": truck,
+                        "bruto": weight_kg
+                    }), 200
 
-                # Create new IN session (truck not currently IN or session closed)
+                # else create new session
                 session_id = int(time.time())
-                cursor.execute("INSERT INTO transactions (direction, truck, containers, bruto, produce, datetime, session_id) VALUES (%s, %s, %s, %s, %s, NOW(), %s)",
-                               (direction, truck, containers, weight_kg, produce, session_id))
+                cursor.execute("""
+                    INSERT INTO transactions
+                    (direction, truck, containers, bruto, produce, datetime, session_id)
+                    VALUES (%s, %s, %s, %s, %s, NOW(), %s)
+                """, (direction, truck, containers_norm_str, weight_kg, produce, session_id))
                 conn.commit()
-                return jsonify({"id": cursor.lastrowid, "truck": truck, "bruto": weight_kg}), 201
 
-            # === DIRECTION: OUT ===
+                return jsonify({
+                    "id": str(cursor.lastrowid),
+                    "truck": truck,
+                    "bruto": weight_kg
+                }), 201
+
+            # ---------------------------
+            # DIRECTION: OUT
+            # ---------------------------
             elif direction == 'out':
-                cursor.execute("SELECT * FROM transactions WHERE truck = %s AND direction = 'in' ORDER BY datetime DESC LIMIT 1", (truck,))
+                # must have previous IN
+                cursor.execute("""
+                    SELECT *
+                    FROM transactions
+                    WHERE truck=%s AND direction='in'
+                    ORDER BY datetime DESC, id DESC
+                    LIMIT 1
+                """, (truck,))
                 last_in = cursor.fetchone()
 
                 if not last_in:
-                    return jsonify({"error": "No previous 'in' record found for truck"}), 404
+                    return jsonify({"error": "No previous 'in' record found for truck"}), 409
 
-                cursor.execute("SELECT id FROM transactions WHERE session_id = %s AND direction = 'out' LIMIT 1", (last_in['session_id'],))
+                session_id = last_in['session_id']
+                bruto_in = last_in['bruto']
+                truck_tara = weight_kg
+
+                # check existing OUT for that session
+                cursor.execute("""
+                    SELECT id
+                    FROM transactions
+                    WHERE session_id=%s AND truck=%s AND direction='out'
+                    LIMIT 1
+                """, (session_id, truck))
                 existing_out = cursor.fetchone()
 
+                if existing_out and not force:
+                    return jsonify({"error": "OUT already exists for this session. Use force=true to overwrite."}), 409
+
+                # containers in OUT must match IN or be empty (unless force)
+                in_containers_norm = (last_in['containers'] or "").replace(" ", "")
+                in_list = [c for c in in_containers_norm.split(',') if c]
+
+                if container_list and container_list != in_list and not force:
+                    return jsonify({"error": "OUT containers must match IN containers"}), 409
+
+                # tara validations
+                if truck_tara > bruto_in and not force:
+                    return jsonify({"error": "Truck tara exceeds bruto"}), 409
+
+                # neto: None if some containers unknown
+                neto = calculate_neto(cursor, bruto_in, truck_tara, containers_norm_str)
+
+                # extra validation vs known container weights
+                if container_list:
+                    placeholders = ','.join(['%s'] * len(container_list))
+                    cursor.execute(
+                        f"SELECT SUM(weight) as total, COUNT(*) as count "
+                        f"FROM containers_registered WHERE container_id IN ({placeholders})",
+                        tuple(container_list)
+                    )
+                    res = cursor.fetchone() or {"total": 0, "count": 0}
+                    known_weight = int(res["total"] or 0)
+
+                    if truck_tara > bruto_in - known_weight and not force:
+                        return jsonify({"error": "Tara too high vs known containers"}), 409
+
                 if existing_out:
-                    # OUT already exists - check force flag
-                    if not force:
-                        return jsonify({"error": "Transaction already closed (OUT exists). Use force=true to overwrite."}), 400
-
-                    # Force=true: update existing OUT record
-                    neto = calculate_neto(cursor, last_in['bruto'], weight_kg, containers)
-                    cursor.execute("UPDATE transactions SET containers = %s, truckTara = %s, neto = %s, produce = %s, datetime = NOW() WHERE id = %s",
-                                   (containers, weight_kg, neto, produce, existing_out['id']))
+                    # overwrite OUT by UPDATE (keep id)
+                    cursor.execute("""
+                        UPDATE transactions
+                        SET containers=%s, truckTara=%s, neto=%s, produce=%s, datetime=NOW()
+                        WHERE id=%s
+                    """, (containers_norm_str, truck_tara, neto, produce, existing_out['id']))
                     conn.commit()
-                    return jsonify({"id": existing_out['id'], "truck": truck, "bruto": last_in['bruto'], "truckTara": weight_kg, "neto": neto if neto is not None else "na"}), 200
+                    out_id = existing_out['id']
+                    status = 200
+                else:
+                    cursor.execute("""
+                        INSERT INTO transactions
+                        (direction, truck, containers, truckTara, neto, produce, datetime, session_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
+                    """, (direction, truck, containers_norm_str, truck_tara, neto, produce, session_id))
+                    conn.commit()
+                    out_id = cursor.lastrowid
+                    status = 201
 
-                # Create new OUT record (closes the session)
-                neto = calculate_neto(cursor, last_in['bruto'], weight_kg, containers)
-                session_id = last_in['session_id']
+                return jsonify({
+                    "id": str(out_id),
+                    "truck": truck,
+                    "bruto": bruto_in,
+                    "truckTara": truck_tara,
+                    "neto": neto if neto is not None else "na"
+                }), status
 
-                cursor.execute("INSERT INTO transactions (direction, truck, containers, truckTara, neto, produce, datetime, session_id) VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)",
-                               (direction, truck, containers, weight_kg, neto, produce, session_id))
-                conn.commit()
-                return jsonify({"id": cursor.lastrowid, "truck": truck, "bruto": last_in['bruto'], "truckTara": weight_kg, "neto": neto if neto is not None else "na"}), 201
-
-            # === DIRECTION: NONE ===
+            # ---------------------------
+            # DIRECTION: NONE
+            # ---------------------------
             else:
-                # Ensure truck isn't currently IN (prevents NONE during an open session)
-                if truck != 'na':
-                    cursor.execute("SELECT session_id FROM transactions WHERE truck = %s AND direction = 'in' ORDER BY datetime DESC LIMIT 1", (truck,))
-                    last_in = cursor.fetchone()
-
-                    if last_in and not check_session_closed(cursor, last_in['session_id']):
-                        return jsonify({"error": "Truck is currently IN. Cannot perform NONE transaction."}), 400
-
-                # Create standalone NONE transaction (new session)
                 session_id = int(time.time())
-                cursor.execute("INSERT INTO transactions (direction, bruto, datetime, session_id) VALUES (%s, %s, NOW(), %s)",
-                               (direction, weight_kg, session_id))
+                cursor.execute("""
+                    INSERT INTO transactions
+                    (direction, bruto, datetime, session_id)
+                    VALUES (%s, %s, NOW(), %s)
+                """, (direction, weight_kg, session_id))
                 conn.commit()
-                return jsonify({"id": cursor.lastrowid, "bruto": weight_kg}), 201
+
+                return jsonify({
+                    "id": str(cursor.lastrowid),
+                    "truck": "na",
+                    "bruto": weight_kg
+                }), 201
 
     except mysql.connector.Error as e:
-        return jsonify({"error": f"Database error: {str(e)}"}), 500
+        app.logger.error(f"Database error in POST /weight: {e}")
+        return jsonify({"error": "Database error"}), 500
     except Exception as e:
-        return jsonify({"error": f"Server error: {str(e)}"}), 500
+        app.logger.error(f"Server error in POST /weight: {e}")
+        return jsonify({"error": "Server error"}), 500
 
 @app.route('/session', defaults={'id': None}, methods=['GET'])
 @app.route('/session/<id>', methods=['GET'])

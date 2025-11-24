@@ -86,9 +86,9 @@ def run_tests():
     # We will fetch the Session ID later via /item/<id>
 
     # --- 4. POST /weight (IN) Duplicate Force=False ---
-    # Verifies that trying to weigh IN again without force=true fails (400 Bad Request).
+    # Verifies that trying to weigh IN again without force=true fails (409 Conflict).
     code, body = make_request("POST", "/weight", data_in)
-    print_result("POST /weight (IN) Duplicate Force=False", code != 201, f"Code: {code} (Expected Error)")
+    print_result("POST /weight (IN) Duplicate Force=False", code == 409, f"Code: {code} (Expected 409)")
 
     # --- 5. POST /weight (IN) Duplicate Force=True ---
     # Verifies that force=true allows overwriting an existing IN transaction.
@@ -129,11 +129,11 @@ def run_tests():
          print(f"   Response Body: {body}")
 
     # --- 8. POST /weight (OUT) without IN ---
-    # Verifies that trying to weigh OUT for a truck not currently IN fails (404/400).
+    # Verifies that trying to weigh OUT for a truck not currently IN fails (409 Conflict).
     data_out_bad = data_out.copy()
     data_out_bad["truck"] = "T-99999"
     code, body = make_request("POST", "/weight", data_out_bad)
-    print_result("POST /weight (OUT) without IN", code in [400, 404], f"Code: {code} (Expected 400/404)")
+    print_result("POST /weight (OUT) without IN", code == 409, f"Code: {code} (Expected 409)")
 
     # --- 9. GET /weight (Filter) ---
     # Verifies retrieving transactions with default filters works (200 OK).
@@ -160,6 +160,23 @@ def run_tests():
     else:
         print("[SKIP] GET /session/<id> - No session ID found in item history")
 
+    # --- 11a. GET /session (Non-existent ID) ---
+    # Verifies that querying a non-existent session returns 404.
+    fake_session_id = "9999999999"
+    code, body = make_request("GET", f"/session/{fake_session_id}")
+    print_result("GET /session (Non-existent)", code == 404, f"Code: {code}")
+
+    # --- 11b. GET /session (Invalid Format) ---
+    # Verifies that invalid session ID format returns 400.
+    code, body = make_request("GET", "/session/INVALID_SESSION")
+    print_result("GET /session (Invalid Format)", code >= 400, f"Code: {code}")
+
+    # --- 11c. GET /session (List All) ---
+    # Verifies that GET /session without ID returns list of sessions.
+    code, body = make_request("GET", "/session")
+    is_list = isinstance(body, list)
+    print_result("GET /session (List All)", code == 200 and is_list, f"Code: {code}, Type: {type(body)}")
+
     # --- 12. POST /batch-weight (CSV) ---
     # Verifies batch upload using existing mock file 'containers1.csv'.
     csv_file = "containers1.csv"
@@ -179,6 +196,16 @@ def run_tests():
         print_result("POST /batch-weight (JSON)", code == 200, f"Code: {code}")
     else:
         print(f"[SKIP] POST /batch-weight (JSON) - {json_file} not found in {IN_DIR}")
+
+    # --- 13a. POST /batch-weight (Non-existent File) ---
+    # Verifies that requesting a non-existent file returns an error.
+    code, body = make_request("POST", "/batch-weight", {"file": "does_not_exist.csv"})
+    print_result("POST /batch-weight (Non-existent)", code >= 400, f"Code: {code}")
+
+    # --- 13b. POST /batch-weight (Invalid Format) ---
+    # Verifies that requesting an invalid file format returns an error.
+    code, body = make_request("POST", "/batch-weight", {"file": "invalid.txt"})
+    print_result("POST /batch-weight (Invalid Format)", code >= 400, f"Code: {code}")
 
     # --- 14. GET /weight (Specific Filter) ---
     # Verifies that ?filter=in returns ONLY 'in' direction transactions.
@@ -237,7 +264,7 @@ def run_tests():
         ("Float Weight", "weight", 100.5),
         ("Zero Weight", "weight", 0),
         ("Whitespace Truck", "truck", "   "),
-        ("Whitespace Produce", "produce", "   "),
+
         ("Empty Containers (IN)", "containers", ""),
         ("Force as String", "force", "true")
     ]
@@ -252,13 +279,13 @@ def run_tests():
     print("\n--- State Transition Tests ---")
     
     # OUT -> OUT (force=false)
-    # Verifies that weighing OUT twice for the same session fails without force=true.
+    # Verifies that weighing OUT twice for the same session fails without force=true (409 Conflict).
     truck_state = "T-STATE-1"
     make_request("POST", "/weight", {"direction": "in", "truck": truck_state, "containers": "C-X", "weight": 1000, "unit": "kg", "produce": "test", "force": False})
     make_request("POST", "/weight", {"direction": "out", "truck": truck_state, "containers": "C-X", "weight": 200, "unit": "kg", "produce": "test", "force": False})
     
     code, body = make_request("POST", "/weight", {"direction": "out", "truck": truck_state, "containers": "C-X", "weight": 250, "unit": "kg", "produce": "test", "force": False})
-    print_result("OUT -> OUT (force=false)", code == 400, f"Code: {code} (Expected 400)")
+    print_result("OUT -> OUT (force=false)", code == 409, f"Code: {code} (Expected 409)")
 
     # OUT -> OUT (force=true)
     # Verifies that force=true allows updating an existing OUT transaction.
@@ -314,20 +341,18 @@ def run_tests():
     if not is_na:
         print(f"   Response Body: {body}")
 
-    # 3. Container Swapping (IN vs OUT)
-    # Scenario: Truck IN with C-35434 (296kg), OUT with C-73281 (273kg).
+    # 3. Container Matching (IN == OUT)
+    # Scenario: API now enforces that OUT containers must match IN containers.
     time.sleep(1.5) # Wait for unique session ID
-    truck_swap = f"T-SWAP-{ts}"
+    truck_match = f"T-MATCH-{ts}"
     # IN with C-35434
-    make_request("POST", "/weight", {"direction": "in", "truck": truck_swap, "containers": "C-35434", "weight": 10000, "unit": "kg", "produce": "swap_test", "force": True})
-    # OUT with C-73281
-    code, body = make_request("POST", "/weight", {"direction": "out", "truck": truck_swap, "containers": "C-73281", "weight": 2000, "unit": "kg", "produce": "swap_test", "force": False})
+    make_request("POST", "/weight", {"direction": "in", "truck": truck_match, "containers": "C-35434", "weight": 10000, "unit": "kg", "produce": "match_test", "force": True})
+    # OUT with same container C-35434
+    code, body = make_request("POST", "/weight", {"direction": "out", "truck": truck_match, "containers": "C-35434", "weight": 2000, "unit": "kg", "produce": "match_test", "force": False})
     
-    print_result("Container Swapping (IN!=OUT)", code in [200, 201], f"Code: {code}")
+    print_result("Container Matching (IN==OUT)", code in [200, 201], f"Code: {code}")
     if code in [200, 201]:
-        print(f"   Neto with swapped container: {body.get('neto')}")
-    else:
-        print(f"   Response Body: {body}")
+        print(f"   Neto: {body.get('neto')}")
 
     # 4. Zero Net Weight
     # Scenario: Neto = Bruto(IN) - Weight(OUT) - Tara(Containers) = 0
