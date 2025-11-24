@@ -4,58 +4,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gan Shmuel - Weight System</title>
+    <title>Weight Management System</title>
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
 <body>
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+    </div>
+
     <header>
-        <h1>🏭 Gan Shmuel Weight System</h1>
+        <div class="header-content">
+            <h1>Weight Management System</h1>
+            <p class="subtitle">Gan Shmuel Operations Portal</p>
+        </div>
     </header>
 
     <main>
+        <!-- Statistics Dashboard -->
+        <section class="stats-grid">
+            <div class="stat-card fade-in">
+                <div class="stat-content">
+                    <div class="stat-label">Transactions</div>
+                    <div class="stat-value" id="statEntries">--</div>
+                </div>
+            </div>
+            <div class="stat-card fade-in" style="animation-delay: 0.1s">
+                <div class="stat-content">
+                    <div class="stat-label">Unknown Containers</div>
+                    <div class="stat-value" id="statUnknown">--</div>
+                </div>
+            </div>
+        </section>
+
         <!-- Weight Form Section -->
-        <section class="card">
-            <h2>Record Weight</h2>
-            <form id="weightForm">
+        <section class="card primary-card fade-in" style="animation-delay: 0.3s">
+            <div class="card-header">
+                <h2>Record Weight Entry</h2>
+                <p class="card-description">Submit weight measurements for incoming and outgoing shipments</p>
+            </div>
+            <form id="weightForm" novalidate>
                 <div class="form-row">
                     <div class="form-group">
                         <label for="direction">Direction *</label>
                         <select id="direction" required>
-                            <option value="">Select...</option>
+                            <option value="">Select direction...</option>
                             <option value="in">IN (Arrival)</option>
                             <option value="out">OUT (Departure)</option>
                             <option value="none">NONE (Standalone)</option>
                         </select>
+                        <span class="field-error" id="directionError"></span>
                     </div>
 
                     <div class="form-group">
-                        <label for="truck">Truck ID * </label>
+                        <label for="truck">Truck ID *</label>
                         <input type="text" id="truck" placeholder="T-12345" required>
+                        <span class="field-error" id="truckError"></span>
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="containers">Containers</label>
-                        <input type="text" id="containers" placeholder="C-12345,K-1234">
-                        <small>Comma-separated list</small>
+                        <label for="containers">Container IDs</label>
+                        <input type="text" id="containers" placeholder="C-12345, K-1234">
+                        <small>Comma-separated list (optional)</small>
                     </div>
 
                     <div class="form-group">
-                        <label for="produce">Produce *</label>
-                        <input type="text" id="produce" placeholder="apples" required>
+                        <label for="produce">Produce Type *</label>
+                        <input type="text" id="produce" placeholder="e.g., apples, oranges" required>
+                        <span class="field-error" id="produceError"></span>
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="weight">Weight *</label>
+                        <label for="weight">Weight Value *</label>
                         <input type="number" id="weight" placeholder="1000" required min="1">
+                        <span class="field-error" id="weightError"></span>
                     </div>
 
                     <div class="form-group">
-                        <label for="unit">Unit *</label>
+                        <label for="unit">Unit of Measurement *</label>
                         <select id="unit" required>
                             <option value="kg">Kilograms (kg)</option>
                             <option value="lbs">Pounds (lbs)</option>
@@ -66,72 +104,43 @@
                 <div class="form-group checkbox-group">
                     <label>
                         <input type="checkbox" id="force">
-                        Force overwrite (if duplicate)
+                        <span>Force overwrite existing entry</span>
                     </label>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Submit Weight</button>
+                <button type="submit" class="btn btn-primary">
+                    Submit Entry
+                </button>
             </form>
 
             <div id="formMessage"></div>
         </section>
 
-        <!-- Quick Actions -->
-        <section class="card actions-card">
-            <h2>Quick Actions</h2>
+        <!-- System Operations -->
+        <section class="card operations-card glass-effect fade-in" style="animation-delay: 0.4s">
+            <div class="card-header">
+                <h2>System Operations</h2>
+            </div>
             <div class="action-buttons">
                 <button class="btn btn-secondary" onclick="getUnknownContainers()">
-                    📦 Check Unknown Containers
+                    <span class="btn-icon">🔍</span>
+                    <span>Validate Containers</span>
                 </button>
-                <button class="btn btn-secondary" onclick="refreshTransactions()">
-                    🔄 Refresh Transactions
+                <button class="btn btn-secondary" onclick="checkSystemStatus()">
+                    <span class="btn-icon">✓</span>
+                    <span>System Health Check</span>
                 </button>
             </div>
             <div id="unknownContainers"></div>
-        </section>
-
-        <!-- Transactions Table -->
-        <section class="card">
-            <div class="table-header">
-                <h2>Recent Transactions</h2>
-                <div class="filter-group">
-                    <label>
-                        <input type="checkbox" id="filterIn" checked onchange="refreshTransactions()"> IN
-                    </label>
-                    <label>
-                        <input type="checkbox" id="filterOut" checked onchange="refreshTransactions()"> OUT
-                    </label>
-                    <label>
-                        <input type="checkbox" id="filterNone" checked onchange="refreshTransactions()"> NONE
-                    </label>
-                </div>
-            </div>
-
-            <div class="table-container">
-                <table id="transactionsTable">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Direction</th>
-                            <th>Truck</th>
-                            <th>Bruto (kg)</th>
-                            <th>Neto</th>
-                            <th>Produce</th>
-                            <th>Containers</th>
-                        </tr>
-                    </thead>
-                    <tbody id="transactionsBody">
-                        <tr>
-                            <td colspan="7" class="loading">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <div id="systemStatus"></div>
         </section>
     </main>
 
     <footer>
-        <p>Gan Shmuel Weight System &copy; 2025</p>
+        <div class="footer-content">
+            <p>Gan Shmuel Weight Management System</p>
+            <p class="footer-meta">© 2025 • Operations Portal v2.0</p>
+        </div>
     </footer>
 
     <script src="/static/app.js"></script>
