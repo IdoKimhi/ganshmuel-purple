@@ -23,21 +23,21 @@ docker compose -f docker-compose-test.yml up -d --build
 echo "Selecting test script..."
 
 if [ "$BRANCH" = "weight" ]; then
-    TEST_SCRIPTS=("../weight/verify_weight_api.py")
+    TEST_SCRIPTS=("../weight/e2e_test.py")
 
 elif [ "$BRANCH" = "billing" ]; then
     TEST_SCRIPTS=("../billing/test_billing.sh")
 
 elif [ "$BRANCH" = "main" ]; then
     TEST_SCRIPTS=(
-        "../weight/verify_weight_api.py"
+        "../weight/e2e_test.py"
         "../billing/test_billing.sh"
     )
 
 else
     echo "Unknown branch → Running ALL tests by default"
     TEST_SCRIPTS=(
-        "../weight/verify_weight_api.py"
+        "../weight/e2e_test.py"
         "../billing/test_billing.sh"
     )
 fi
