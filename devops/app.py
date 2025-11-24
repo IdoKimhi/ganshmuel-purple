@@ -1,11 +1,13 @@
 from flask import Flask, request, jsonify
-# Import the function from your new file
-from email_service import send_notification_email, send_simple_alert_email
-from self_update import trigger_update_async 
+from email_service import send_notification_email, send_simple_alert_email, send_team_notification
+#from self_update import trigger_update_async 
 import json
 import os
 import subprocess
 import threading
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path='recipient_config.env')
 
 app = Flask(__name__)
 
@@ -24,12 +26,8 @@ def trigger_handler():
     
     pusher_data = data.get('pusher', {})
     pusher_username = pusher_data.get('name', 'N/A') 
-
-    # 2. Safely extract ref and determine branch
-    ref = data.get("ref", "")            # e.g. "refs/heads/dev"
+    ref = data.get("ref", "")
     branch = ref.split("/")[-1] if ref.startswith("refs/heads/") else "unknown"
-    
-    # Extract other data needed for logging (optional data is okay to be processed later)
     action = data.get('action', 'N/A')
     repository_data = data.get('repository', {})
     branches_url = repository_data.get('branches_url', 'N/A')
@@ -47,18 +45,42 @@ def trigger_handler():
     branch = ref.split("/")[-1] if ref else "unknown"
     print(f"Branch pushed: {branch}")
 
-    #TEST self_update upon push to dev
+    #TEST team mail upon push to dev
     if branch == 'dev':
-        print(">>> DEV branch push detected. Triggering CI self-update and redeployment...")
         
-        # Call the imported service function to handle the shutdown/restart asynchronously
-        trigger_update_async() 
+        # 1. Load DevOps emails directly from environment variables
+        # This list will be the actual recipients
+        DEVOPS_EMAILS = [e.strip() for e in os.getenv('DEVOPS_TEAM_EMAILS', '').split(',') if e.strip()]
+        
+        if not DEVOPS_EMAILS:
+            print("ERROR: DEVOPS_TEAM_EMAILS is not configured. Cannot send production email.")
+            return jsonify({
+                "message": f"Code pushed to '{branch}' by {pusher_username}. Configuration error: DEVOPS_TEAM_EMAILS not found.",
+            }), 200
 
-        # Return success immediately while the server tears itself down in the background.
-        return jsonify({
-            "message": f"CI Self-Update for branch '{branch}' initiated by {pusher_username}. Server will restart shortly.",
-            "status": "restarting"
-        }), 200
+        try:
+            # 2. Call the production-ready function with the actual email list
+            send_team_notification(
+                branch_name=branch, 
+                pusher_username=pusher_username, 
+                recipient_emails=DEVOPS_EMAILS
+            )
+            
+            notification_message = f"Code was pushed into '{branch}' initiated by {pusher_username}. Production notification sent to DevOps Team."
+            
+            return jsonify({
+                "message": notification_message,
+            }), 200
+        
+        except Exception as e:
+            print(f"ERROR: Failed to send DevOps team notification: {e}")
+            return jsonify({
+                "message": f"Code pushed, but failed to send DevOps notification. Error: {str(e)}",
+            }), 200
+
+    # --- END TEAM NOTIFICATION INTEGRATION ---
+
+    return jsonify({"message": "Webhook successfully processed"}), 200
         
 #    try:
  #       print(f"Running deploy script for branch: {branch}")
