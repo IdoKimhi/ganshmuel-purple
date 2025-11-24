@@ -78,23 +78,22 @@ def trigger_handler():
                 "message": f"Code pushed, but failed to send DevOps notification. Error: {str(e)}",
             }), 200
 
-    # --- END TEAM NOTIFICATION INTEGRATION ---
-
-    return jsonify({"message": "Webhook successfully processed"}), 200
+ 
         
-#    try:
- #       print(f"Running deploy script for branch: {branch}")
-  #      result = subprocess.run(
-   #         ["bash", "deploy.sh", branch],
-    #        capture_output=True,
-     #       text=True
-      #  )
-       # print("--- Deploy Script Output ---")
-        #print(result.stdout)
-        #print(result.stderr)
-    #except Exception as e:
-     #   print(f"Error running deploy script: {e}")
-      #  return jsonify({"message": "Error running deploy script"}), 500
+    try:
+        print(f"Running deploy script for branch: {branch}")
+        result = subprocess.run(
+            ["bash", "deploy.sh", branch],
+    #
+            capture_output=True,
+            text=True
+        )
+        print("--- Deploy Script Output ---")
+        print(result.stdout)
+        print(result.stderr)
+    except Exception as e:
+        print(f"Error running deploy script: {e}")
+        return jsonify({"message": "Error running deploy script"}), 500
 
 
         #logic goes here, if action == 'created':...
