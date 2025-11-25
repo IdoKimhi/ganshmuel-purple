@@ -1,27 +1,41 @@
-import subprocess
-import os
 from flask import Flask, request, jsonify
+# We are removing unused old imports to keep the file clean
+import json
+import os
+import subprocess
+from dotenv import load_dotenv
 
-# Assuming email_service is available for import if needed, 
-# but the deploy.sh script handles the final email.
-# from email_service import send_team_notification 
+# Load the recipient configuration for the app
+load_dotenv(dotenv_path='recipient_config.env')
 
 app = Flask(__name__)
 
-# --- Mock Function: In a real app, this would use a database or config file ---
+# --- Helper Function to Infer Team ---
 def get_pusher_team(username):
-    """Infers the team based on the pusher's username."""
+    """
+    Infers the team based on the pusher's username using a specific lookup 
+    based on the names defined in recipient_config.env.
+    """
     username = username.lower()
-    if 'billing' in username or 'finance' in username:
+    
+    # Names from BILLING_TEAM_EMAILS
+    if any(name in username for name in ['lironsaada10', 'shay.shalom21', 'nyo1254']):
         return 'billing'
-    elif 'weight' in username or 'logistics' in username:
+    
+    # Names from WEIGHT_TEAM_EMAILS
+    elif any(name in username for name in ['yosefs283', 'arielgabai555', 'lihina4']):
         return 'weight'
+    
+    # Default to DevOps for all others
     else:
         return 'devops'
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    return "OK", 200
+
 @app.route('/trigger', methods=['POST'])
 def trigger_handler():
-    # Check for JSON content type
     if not request.is_json:
         return jsonify({"message": "Content-Type must be application/json"}), 400
 
@@ -34,60 +48,62 @@ def trigger_handler():
     ref = data.get("ref", "")
     branch = ref.split("/")[-1] if ref.startswith("refs/heads/") else "unknown"
     
-    # Determine the pusher's team
-    pusher_team = get_pusher_team(pusher_username) 
+    # Determine the pusher's team (Crucial step for deployment script)
+    pusher_team = get_pusher_team(pusher_username)
 
+    action = data.get('action', 'N/A')
+    
     # Logging for visibility
     print("--- GitHub Webhook Received ---")
+    print(f"Action: {action}")
     print(f"Pusher: {pusher_username}")
     print(f"Pusher Team: {pusher_team}")
     print(f"Branch pushed: {branch}")
     print("-------------------------------")
-
-    # ============================================================
-    # RUN CI PIPELINE (deploy.sh)
-    # ============================================================
-    try:
-        if branch == 'ido':
-            print(f"Running deploy script for branch: {branch} with pusher: {pusher_username} and team: {pusher_team}")
+    
+    # --- CRITICAL CHANGE: Check for 'ido' branch for local testing ---
+    if branch == 'ido':
+        try:
+            print(f"Running deploy script for CI branch: {branch} (Pusher: {pusher_username}, Team: {pusher_team})")
             
-            # Pass all three required arguments to deploy.sh
+            # Pass all three required arguments to deploy.sh using the correct path
             result = subprocess.run(
-                ["bash", "deploy.sh", branch, pusher_username, pusher_team],
+                ["bash", "deploy.sh", branch, pusher_username, pusher_team], 
                 capture_output=True,
                 text=True,
-                check=True # Raise an exception if the command exits with a non-zero status
+                check=True # Raise CalledProcessError if deploy.sh exits non-zero (i.e., failed tests)
             )
 
-            print("--- Deploy Script Output (STDOUT) ---")
+            print("--- Deploy Script Output ---")
             print(result.stdout)
-            if result.stderr:
-                 print("--- Deploy Script Output (STDERR) ---")
-                 print(result.stderr)
             
-            # If the script ran successfully (status code 0)
             return jsonify({
                 "message": f"Webhook processed. CI pipeline SUCCESS for '{branch}' by '{pusher_username}'.",
-                "output": result.stdout
+                "output": result.stdout.split('\n')[-5:] # Show last few lines of output
             }), 200
-        
-        else:
+
+        except subprocess.CalledProcessError as e:
+            # This catches CI failure (deploy.sh exited 1). Failure email is sent within deploy.sh.
+            error_output = e.stdout + e.stderr
+            print(f"CI Pipeline FAILED: {error_output}")
+            
             return jsonify({
-                "message": f"Webhook received for branch '{branch}'. CI pipeline SKIPPED (only runs on 'dev')."
-            }), 200
+                "message": f"CI Pipeline FAILED for branch '{branch}'. Rollback executed and failure email sent.",
+                "error_summary": error_output.split('\n')[-5:]
+            }), 500
 
-    except subprocess.CalledProcessError as e:
-        # This catches errors where deploy.sh returns non-zero (i.e., test failure)
-        # The failure email is handled inside deploy.sh, but we report the CI failure here.
-        error_output = e.stdout + e.stderr
-        print(f"Error running deploy script (CI FAILURE): {error_output}")
-        
-        return jsonify({
-            "message": f"CI Pipeline FAILED for branch '{branch}'. Rollback executed and failure email sent.",
-            "error_summary": error_output.split('\n')[-3:] # Show last few lines of output
-        }), 500
+        except Exception as e:
+            print(f"Error running deploy script: {e}")
+            return jsonify({"message": f"Error running deploy script: {e}"}), 500
+ 
+    # ============================================================
+    # FINAL RESPONSE for non-CI branches
+    # ============================================================
+    return jsonify({
+        # Ensure the skip message is accurate based on the branch name we are testing against ('ido')
+        "message": f"Webhook successfully processed for branch '{branch}' by user '{pusher_username}'. CI skipped (only runs on 'ido')."
+    }), 200
 
-    except Exception as e:
-        # Catches general execution errors (e.g., file not found)
-        print(f"Unexpected Error running deploy script: {e}")
-        return jsonify({"message": f"Unexpected CI Server Error: {e}"}), 500
+# run production
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080, debug=True)
