@@ -7,6 +7,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def send_monitor_alert(service_name, environment, message, to_emails=None):
+    subject = f"[CI-MONITOR] {environment.upper()} - {service_name} FAILURE"
+
+    html_body = f"""
+    <h2 style="color:red;">Service Failure Detected</h2>
+
+    <p><strong>Environment:</strong> {environment}</p>
+    <p><strong>Service:</strong> {service_name}</p>
+    <p><strong>Message:</strong> {message}</p>
+
+    <hr>
+    <p>This alert was generated automatically by the CI monitor.</p>
+    """
+
+    _send_via_smtp(subject, html_body, to_emails)
+    return True
+
 # --- Internal Helper to Send the Actual Email ---
 def _send_via_smtp(subject, html_body, to_emails=None):
     SMTP_SERVER = "smtp.gmail.com"
@@ -116,6 +133,24 @@ def send_team_notification(branch_name, pusher_username, recipient_emails):
 
 # --- 4. Main Block (CLI Handler) ---
 if __name__ == "__main__":
+
+    # ================================
+    # MONITOR MODE
+    # ================================
+    if len(sys.argv) >= 2 and sys.argv[1] == "monitor":
+        # monitor <service> <env> <message> <to>
+        if len(sys.argv) < 6:
+            print("Usage: python email_service.py monitor <SERVICE> <ENV> <MESSAGE> <TO_EMAILS>")
+            sys.exit(1)
+
+        _, _, service, env, message, to = sys.argv
+        send_monitor_alert(service, env, message, to)
+        sys.exit(0)
+
+
+    # ================================
+    # BUILD / CI MODE
+    # ================================
     if len(sys.argv) < 3:
         print("Usage: python email_service.py <STATUS> <BRANCH>")
         sys.exit(1)
