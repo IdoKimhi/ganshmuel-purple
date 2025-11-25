@@ -45,6 +45,8 @@ COPY --from=builder /usr/local/lib/python3.10/site-packages \
 
 COPY . .
 
+# --- FIX: Explicitly expose the port for metadata reporting in 'docker ps' ---
 EXPOSE 8080
+# ---------------------------------------------------------------------------
 
-CMD ["python3", "app.py"]
+# CMD is defined in docker-compose.yml as `command: ["python", "app.py"]`
