@@ -55,6 +55,20 @@ def _send_via_smtp(subject, html_body, to_emails=None):
         print("Warning: No final recipients resolved. Email not sent.")
         return
 
+    # Normalize recipients: can be a string (comma-separated) or a list
+    if isinstance(to_emails, str):
+        # Handle the common case where ENV variables are comma-separated
+        recipient_list = [e.strip() for e in to_emails.split(',') if e.strip()]
+    elif isinstance(to_emails, list):
+        recipient_list = to_emails
+    else:
+        # Fallback to the single test user if no specific recipients are passed
+        recipient_list = [os.getenv('EMAIL_USER')] 
+    
+    if not recipient_list or recipient_list == ['']:
+        print("Warning: No recipients specified. Email not sent.")
+        return
+
     msg = MIMEMultipart()
     msg['From'] = SENDER_EMAIL
     msg['To'] = ", ".join(final_recipient_list) 
@@ -165,6 +179,28 @@ def send_build_status_email(status, branch): pass
 def send_build_status_email_test(status, branch): pass
 def send_team_notification(branch_name, pusher_username, recipient_emails): pass
 # --- End Redundant Functions ---
+
+def send_team_notification(branch_name, pusher_username, recipient_emails):
+    """
+    Sends a production deployment notification email to the actual DevOps team.
+    
+    :param branch_name: The branch that was pushed (should be 'dev').
+    :param pusher_username: The GitHub user who made the push.
+    :param recipient_emails: The actual list of DEVOPS_TEAM_EMAILS.
+    """
+    subject = f"CI ALERT: Production Push to '{branch_name}' detected by {pusher_username}"
+    
+    html_body = f"""
+    <h2>CI/CD Notification</h2>
+    <p>A **production-critical** push event was detected on the <b>'{branch_name}'</b> branch.</p>
+    <p><b>Initiated By:</b> {pusher_username}</p>
+    <p><b>Recipient Team:</b> DevOps Team</p>
+    <p><b>Action Required:</b> DevOps Team is notified for immediate review/deployment steps.</p>
+    """
+    
+    print(f"Sending production notification to DevOps Team: {', '.join(recipient_emails)}")
+    _send_via_smtp(subject, html_body, recipient_emails)    
+    return True
 
 # --- 4. Main Block (CLI Handler) ---
 if __name__ == "__main__":

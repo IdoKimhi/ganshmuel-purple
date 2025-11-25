@@ -4,7 +4,7 @@ RUN apk add --no-cache gcc musl-dev libffi-dev
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY ./app/requirements.txt .
 
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
@@ -16,6 +16,6 @@ WORKDIR /app
 
 COPY --from=builder /install /usr/local
 
-COPY billing.svc.py .
+COPY ./app/billing.svc.py .
 
 CMD ["python", "billing.svc.py"]

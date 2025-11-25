@@ -12,19 +12,29 @@ from openpyxl import load_workbook, Workbook
 # Configuration
 # -------------------------------------------------------------------
 
+def require_env(name: str) -> str:
+    """
+    Get a required environment variable.
+    Raise a clear error if it's missing.
+    """
+    value = os.environ.get(name)
+    if value is None:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
 DB_CONFIG = {
-    "host": os.environ.get("DB_HOST", "localhost"),
-    "user": os.environ.get("DB_USER", "root"),
-    "password": os.environ.get("DB_PASSWORD", "12345678"),
-    "database": os.environ.get("DB_NAME", "billdb"),
-    "port": int(os.environ.get("DB_PORT", 3306)),
+    "host": require_env("DB_HOST"),
+    "user": require_env("DB_USER"),
+    "password": require_env("DB_PASSWORD"),
+    "database": require_env("DB_NAME"),
+    "port": int(require_env("DB_PORT")),
 }
 
 # Base URL of Weight service, e.g. "http://weight:5000"
-WEIGHT_SERVICE_URL = os.environ.get("WEIGHT_SERVICE_URL", "http://weight:5000")
+WEIGHT_SERVICE_URL = require_env("WEIGHT_SERVICE_URL")
 
 # Directory inside container where rates files live (mounted volume)
-RATES_DIR = os.environ.get("RATES_DIR", "/in")
+RATES_DIR = require_env("RATES_DIR")
 
 
 def create_app() -> Flask:
@@ -71,6 +81,34 @@ def create_app() -> Flask:
         resp = requests.get(url, params=params, timeout=5)
         resp.raise_for_status()
         return resp.json()
+    
+    def get_produce_for_session(session_id: str, t1: str, t2: str) -> Optional[str]:
+        """
+        Fallback for getting the product/produce of a session when /session/<id>
+        does not return it (per the official Weight spec).
+
+        Strategy:
+        - Call GET /weight?from=t1&to=t2
+        - Look for an entry whose id matches session_id
+        - Return its 'produce' field if found
+        """
+        try:
+            weights = call_weight_service(
+                "/weight",
+                params={"from": t1, "to": t2, "filter": "in,out,none"},
+            )
+        except requests.exceptions.RequestException:
+            return None
+
+        if not isinstance(weights, list):
+            return None
+
+        for w in weights:
+            # Assuming the 'id' from GET /weight matches the session id we have
+            if str(w.get("id")) == str(session_id):
+                return w.get("produce")
+
+        return None
 
     # ---------------------------------------------------------------
     # GET /health
@@ -390,6 +428,7 @@ def create_app() -> Flask:
             return jsonify({"error": "failed to reach Weight service", "details": str(e)}), 502
 
         return jsonify(data), 200
+
     # ---------------------------------------------------------------
     # Billing
     # ---------------------------------------------------------------
@@ -509,6 +548,13 @@ def create_app() -> Flask:
                     session_data.get("produce")
                     or session_data.get("product")
                 )
+
+                # If /session/<id> does NOT include produce (per official spec),
+                # fall back to GET /weight and resolve it from there.
+                if not product_id:
+                    product_id = get_produce_for_session(session_id, t1, t2)
+
+                # If we still don't know the product, skip this session
                 if not product_id:
                     continue
 
@@ -553,5 +599,5 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     app = create_app()
-    port = int(os.environ.get("PORT", 5000))
+    port = int(require_env("PORT"))
     app.run(host="0.0.0.0", port=port, debug=True)

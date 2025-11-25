@@ -4,7 +4,7 @@ recipient_config.env
 __pycache__/
 *.pyc
 # ----------------------------------------------------------------------
-# 1. Opseratisdsngdd System & Editor Files (Multi-Platform)
+# 1. Opsersatisdsngdd System & Editor Files (Multi-Platform)
 # ----------------------------------------------------------------------
 
 ## macOS/Linux
@@ -76,14 +76,6 @@ docker-compose.local.yml
 # 5. Database Artifacts (MySQL/General)
 # ----------------------------------------------------------------------
 
-## MySQL Data Dumps & Credentials
-*.sql
-*.sqlite
-*.sqlite3
-*.db
-*.dump
-/data/ # For local MySQL volume data if not using Docker volumes
-.my.cnf # MySQL client configuration file
 
 # ----------------------------------------------------------------------
 # 6. Temporary Files
@@ -108,3 +100,4 @@ docker-compose.local.yml
 /logs/
 *.log
 
+db/

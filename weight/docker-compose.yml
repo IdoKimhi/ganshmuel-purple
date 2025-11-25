@@ -5,18 +5,20 @@ services:
     container_name: weight-db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
     volumes:
       # CHANGED: Path is now local to this folder
       - ./db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 20s
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      timeout: 40s
       retries: 10
     ports:
-      - "${DB_HOST_PORT}:3306"
+      - "${WEIGHT_DB_HOST_PORT}:3306"
+    networks:
+      - purple_network
 
   # Service 2: Python API
   weight-app:
@@ -25,7 +27,7 @@ services:
     container_name: weight-app
     restart: always
     ports:
-      - "${APP_HOST_PORT}:5000"
+      - "${WEIGHT_APP_HOST_PORT}:5000"
     volumes:
       # CHANGED: Paths are now local
       - ./app:/app
@@ -34,10 +36,19 @@ services:
       weight-db:
         condition: service_healthy
     environment:
-      DB_HOST: ${DB_HOST}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: weight
+      WEIGHT_DB_HOST: ${WEIGHT_DB_HOST}
+      WEIGHT_DB_USER: ${WEIGHT_DB_USER}
+      WEIGHT_DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
+      WEIGHT_MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
+      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
+    networks:
+      - purple_network
 
 volumes:
   weight_data:
+
+
+networks:
+  purple_network:
+    name: purple_network
+    external: true

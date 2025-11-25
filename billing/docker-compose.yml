@@ -1,38 +1,36 @@
-version: "3.9"
-
 services:
   billing-db:
     image: mysql:8.0
     container_name: billing-db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: 12345678
-      MYSQL_DATABASE: billdb
+      MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}
     ports:
-      - "8087:3306"
+      - "${BILLING_DB_HOST_PORT}:3306"
     volumes:
       - billing_db_data:/var/lib/mysql
-      - ./billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
+      - ./db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
     networks:
       - billing_network
 
-
   billing:
-    build: .
+    image: lironsaada/billing.svc:4
     container_name: billing
     restart: always
     depends_on:
       - billing-db
     environment:
-      DB_HOST: billing-db
-      DB_USER: root
-      DB_PASSWORD: 12345678
-      DB_NAME: billdb
-      DB_PORT: 3306
-      WEIGHT_SERVICE_URL: http://weight:5000
-      RATES_DIR: /in
+      DB_HOST: ${BILLING_DB_HOST}
+      DB_USER: ${BILLING_DB_USER}
+      DB_PASSWORD: ${BILLING_DB_PASSWORD}
+      DB_NAME: ${BILLING_DB_NAME}
+      DB_PORT: ${BILLING_DB_PORT}
+      WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL}
+      RATES_DIR: ${RATES_DIR}
+      PORT: ${BILLING_SVC_PORT}
     ports:
-      - "8088:5000"
+      - "${BILLING_HOST_PORT}:${BILLING_SVC_PORT}"
     volumes:
       - ./in:/in
     networks:
@@ -44,6 +42,7 @@ volumes:
 
 networks:
   purple_network:
-    driver: bridge
+    external: true
   billing_network:
     driver: bridge
+
