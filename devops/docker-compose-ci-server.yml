@@ -1,3 +1,4 @@
+version: "3.9"
 ci_server:
   #instructs docker compose to build an an image from devops/dockerfile
     build:
