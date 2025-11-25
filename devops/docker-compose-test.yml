@@ -82,7 +82,7 @@ services:
   #           BILLING APP (TEST)
   # ================================
   billing-app-test:
-    image: lironsaada/billing.svc:4
+    build: ../billing
     container_name: billing-app-test
     restart: always
     depends_on:
@@ -99,6 +99,7 @@ services:
       PORT: ${BILLING_SVC_PORT}
     volumes:
       - ../billing/in:/in
+
     ports:
       - "8088:${BILLING_SVC_PORT}"
     networks:
