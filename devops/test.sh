@@ -1,2 +1,2 @@
-echo 'h!!@@Eeee222!ello world again!!!'
+echo 'h!!ello world again!!!'
 '
