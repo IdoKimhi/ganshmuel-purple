@@ -6,12 +6,12 @@ BASE_URL="http://localhost:8088"
 PASS=0
 FAIL=0
 
-cleanup() {
-  echo
-  echo "🧹 Cleaning up containers and volumes..."
-  docker compose down -v >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
+#cleanup() {
+#  echo
+#  echo "🧹 Cleaning up containers and volumes..."
+#  docker compose down -v >/dev/null 2>&1 || true
+#}
+#trap cleanup EXIT
 
 run_test() {
   local name="$1"
