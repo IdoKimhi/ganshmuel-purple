@@ -1,111 +1,104 @@
+
 networks:
-  purple_network:
+  purple_network_prod:
     driver: bridge
-    
-  billing_network:
-    external: true
-    name: purple_network
 
 volumes:
-  weight_data:
-  billing_db_data:
+  weight_data_prod:
+  billing_db_data_prod:
 
 services:
 
   # ================================
   #           WEIGHT DB (PROD)
   # ================================
-  weight-db:
-    extends:
-      file: ../weight/docker-compose.yml
-      service: weight-db
-
+  weight-db-prod:
+    image: mysql:8.0
     container_name: weight-db-prod
-
-    networks:
-      - purple_network
-
+    restart: always
     environment:
-      TZ: Asia/Jerusalem
       MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD_PROD}
       MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE_PROD}
-      DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
-
     volumes:
       - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
-      - weight_data:/var/lib/mysql
-
+      - weight_data_prod:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 40s
+      retries: 10
     ports:
-      - "${WEIGHT_DB_HOST_PORT_PROD}:${WEIGHT_DB_CONTAINER_PORT}"
+      - "8081:3306"
+    networks:
+      - purple_network_prod
 
   # ================================
   #           WEIGHT APP (PROD)
   # ================================
-  weight-app:
-    extends:
-      file: ../weight/docker-compose.yml
-      service: weight-app
-
+  weight-app-prod:
+    build: ../weight
     container_name: weight-app-prod
-
-    networks:
-      - purple_network
-
+    restart: always
+    depends_on:
+      weight-db-prod:
+        condition: service_healthy
     environment:
-      TZ: Asia/Jerusalem
-      DB_USER: ${WEIGHT_DB_USER_PROD}
-      DB_PASSWORD: ${WEIGHT_DB_PASSWORD_PROD}
-      DB_HOST: ${WEIGHT_DB_HOST_PROD}
-      DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
-
+      WEIGHT_DB_HOST: weight-db-prod
+      WEIGHT_DB_USER: ${WEIGHT_DB_USER_PROD}
+      WEIGHT_DB_PASSWORD: ${WEIGHT_DB_PASSWORD_PROD}
+      WEIGHT_MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE_PROD}
+      WEIGHT_DB_CONTAINER_PORT: 3306
+    volumes:
+      - ../weight/app:/app
+      - ../weight/in:/in
     ports:
-      - "${WEIGHT_APP_HOST_PORT_PROD}:5000"
+      - "8082:5000"
+    networks:
+      - purple_network_prod
 
   # ================================
   #           BILLING DB (PROD)
   # ================================
-  billing-db:
-    extends:
-      file: ../billing/docker-compose.yml
-      service: billing-db
-
+  billing-db-prod:
+    image: mysql:8.0
     container_name: billing-db-prod
-
-    networks:
-      - purple_network
-
+    restart: always
     environment:
-      TZ: Asia/Jerusalem
       MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD_PROD}
       MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE_PROD}
-      DB_PORT: ${BILLING_DB_PORT_PROD}
-
+    volumes:
+      - billing_db_data_prod:/var/lib/mysql
+      - ../billing/db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
     ports:
-      - "${BILLING_DB_HOST_PORT_PROD}:${BILLING_DB_PORT_PROD}"
+      - "8083:3306"
+    networks:
+      - purple_network_prod
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 40s
+      retries: 10
 
   # ================================
   #           BILLING APP (PROD)
   # ================================
-  billing:
-    extends:
-      file: ../billing/docker-compose.yml
-      service: billing
-
+  billing-app-prod:
+    image: lironsaada/billing.svc:4
     container_name: billing-app-prod
-
-    networks:
-      - purple_network
-
+    restart: always
+    depends_on:
+      billing-db-prod:
+        condition: service_healthy
     environment:
-      TZ: Asia/Jerusalem
+      DB_HOST: billing-db-prod
       DB_USER: ${BILLING_DB_USER_PROD}
       DB_PASSWORD: ${BILLING_DB_PASSWORD_PROD}
-      DB_HOST: ${BILLING_DB_HOST_PROD}
       DB_NAME: ${BILLING_DB_NAME_PROD}
-      DB_PORT: ${BILLING_DB_PORT_PROD}
-      WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL_PROD}
-      BILLING_SVC_PORT: ${BILLING_SVC_PORT_PROD}
-      RATES_DIR: /app/rates
-
+      DB_PORT: 3306
+      WEIGHT_SERVICE_URL: http://weight-app-prod:5000
+      RATES_DIR: ${RATES_DIR_PROD}
+      PORT: ${BILLING_SVC_PORT_PROD}
+    volumes:
+      - ../billing/in:/in
     ports:
-      - "${BILLING_HOST_PORT_PROD}:${BILLING_SVC_PORT_PROD}"
+      - "8084:${BILLING_SVC_PORT_PROD}"
+    networks:
+      - purple_network_prod
