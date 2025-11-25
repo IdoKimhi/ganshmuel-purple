@@ -95,19 +95,45 @@ def send_simple_alert_email(branch_name, pusher_username):
     return True
 
 
+# --- Helper to get emails based on team name ---
+def get_team_emails(team_name):
+    env_var_map = {
+        "devops": "DEVOPS_TEAM_EMAILS",
+        "billing": "BILLING_TEAM_EMAILS",
+        "weight": "WEIGHT_TEAM_EMAILS"
+    }
+    
+    env_key = env_var_map.get(team_name.lower())
+    if not env_key:
+        print(f"Warning: Unknown team '{team_name}'. Defaulting to DevOps.")
+        env_key = "DEVOPS_TEAM_EMAILS"
+
+    emails_str = os.getenv(env_key, "")
+    # Return list of emails, filtering out empty strings
+    return [e.strip() for e in emails_str.split(',') if e.strip()]
+
 # --- 3. Function for Bash (Test Results) ---
-def send_build_status_email(status, branch):
+def send_build_status_email(status, branch, team="devops"):
+    recipients = get_team_emails(team)
+    
+    if not recipients:
+        print(f"No recipients found for team: {team}")
+        return
+
     # Set color based on status
     color = "green" if status == "Success" else "red"
-    subject = f"Build {status}: Branch '{branch}'"
+    subject = f"Build {status}: Branch '{branch}' - {team.upper()} Notification"
     
     body = f"""
     <h2 style="color: {color};">CI Build {status}</h2>
     <p><strong>Branch:</strong> {branch}</p>
     <p><strong>Status:</strong> <span style="color: {color}; font-weight: bold;">{status}</span></p>
+    <p><strong>Team Notified:</strong> {team.upper()}</p>
     <p>Please check the server logs for details.</p>
     """
-    _send_via_smtp(subject, body)
+    
+    print(f"Sending {status} email to {team} team: {recipients}")
+    _send_via_smtp(subject, body, recipients)
 
 def send_team_notification(branch_name, pusher_username, recipient_emails):
     """
@@ -151,12 +177,14 @@ if __name__ == "__main__":
     # ================================
     # BUILD / CI MODE
     # ================================
+    # Usage: python email_service.py <STATUS> <BRANCH> <TEAM_OPTIONAL>
     if len(sys.argv) < 3:
-        print("Usage: python email_service.py <STATUS> <BRANCH>")
+        print("Usage: python email_service.py <STATUS> <BRANCH> [TEAM]")
         sys.exit(1)
 
     input_status = sys.argv[1]
     input_branch = sys.argv[2]
+    input_team = sys.argv[3] if len(sys.argv) > 3 else "devops"
 
-    print(f"Processing CLI email for {input_status} on {input_branch}...")
-    send_build_status_email(input_status, input_branch)
+    print(f"Processing CLI email for {input_status} on {input_branch} for {input_team}...")
+    send_build_status_email(input_status, input_branch, input_team)

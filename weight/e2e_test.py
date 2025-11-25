@@ -6,7 +6,7 @@ import sys
 import os
 from datetime import datetime, timedelta
 
-BASE_URL = "http://localhost:8086"
+BASE_URL = "http://host.docker.internal:8086"
 # Ensure IN_DIR is always relative to this script's location (weight/in)
 IN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "in")
 
