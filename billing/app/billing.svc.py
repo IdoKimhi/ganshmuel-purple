@@ -2,7 +2,7 @@ import os
 import io
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, render_template
 import pymysql
 from pymysql.err import IntegrityError
 import requests
@@ -102,6 +102,10 @@ def create_app() -> Flask:
                 return w.get("produce")
 
         return None
+    
+    @app.route("/", methods=["GET"])
+    def index():
+        return render_template("index.html")
 
     # ---------------------------------------------------------------
     # GET /health
@@ -151,7 +155,7 @@ def create_app() -> Flask:
             except Exception:
                 pass
 
-        return jsonify({"id": str(provider_id)}), 201
+        return jsonify({"id": str(provider_id), "name": name}), 201
 
     @app.route("/provider/<int:provider_id>", methods=["PUT"])
     def update_provider(provider_id: int):
@@ -181,6 +185,23 @@ def create_app() -> Flask:
             return jsonify({"error": "database error", "details": str(e)}), 500
 
         return jsonify({"id": str(provider_id), "name": name}), 200
+
+    @app.route("/providers", methods=["GET"])
+    def list_providers():
+        """
+        GET /providers
+        Returns list of all providers.
+        """
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, name FROM Provider ORDER BY id")
+                rows = cur.fetchall()
+            conn.close()
+        except Exception as e:
+            return jsonify({"error": "database error", "details": str(e)}), 500
+
+        return jsonify(rows), 200
 
 
     # ---------------------------------------------------------------
@@ -421,6 +442,51 @@ def create_app() -> Flask:
             return jsonify({"error": "failed to reach Weight service", "details": str(e)}), 502
 
         return jsonify(data), 200
+
+    @app.route("/trucks", methods=["GET"])
+    def list_trucks():
+        """
+        GET /trucks
+        Returns all trucks and their providers:
+
+        [
+          { "id": "T-12345", "provider_id": 10001, "provider_name": "Shay" },
+          ...
+        ]
+        """
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT t.id AS truck_id,
+                           t.provider_id AS provider_id,
+                           p.name AS provider_name
+                    FROM Trucks t
+                    LEFT JOIN Provider p ON t.provider_id = p.id
+                    ORDER BY t.id
+                    """
+                )
+                rows = cur.fetchall()
+        except Exception as e:
+            return jsonify({"error": "database error", "details": str(e)}), 500
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        trucks = []
+        for r in rows:
+            trucks.append(
+                {
+                    "id": r["truck_id"],
+                    "provider_id": r["provider_id"],
+                    "provider_name": r["provider_name"],
+                }
+            )
+        return jsonify(trucks), 200
+
     # ---------------------------------------------------------------
     # Billing
     # ---------------------------------------------------------------
