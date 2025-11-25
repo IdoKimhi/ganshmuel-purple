@@ -5,7 +5,6 @@ BRANCH=$1
 echo "=== CI STARTED ==="
 echo "Branch from webhook: $BRANCH"
 echo "Pulling latest code INSIDE CI (for reference)..."
-cd /app_root || exit 1
 git fetch --all
 git pull origin "$BRANCH"
 
