@@ -1,7 +1,10 @@
 networks:
   purple_network:
     driver: bridge
+    
+  billing_network:
     external: true
+    name: purple_network
 
 volumes:
   weight_data:
