@@ -1,7 +1,9 @@
+networks: # <--- 1. Define the network externally
+  purple_network:
+    external: true
 
 services:
   ci_server:
-  #instructs docker compose to build an an image from devops/dockerfile
     build:
       context: .
       dockerfile: dockerfile
@@ -13,7 +15,6 @@ services:
     env_file:
       - .env
       - recipient_config.env
-    #provision for docker.sock
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     - ../:/app_root:rw 
@@ -21,3 +22,6 @@ services:
     working_dir: /app_root/devops
 
     command: ["python", "app.py"]
+    
+    networks: # <--- 2. Assign the service to the network
+      - purple_network

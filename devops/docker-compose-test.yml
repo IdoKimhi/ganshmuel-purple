@@ -2,7 +2,7 @@
 
 networks:
   purple_network:
-    driver: bridge
+    external: true
 
 volumes:
   weight_data_test:
@@ -23,9 +23,10 @@ services:
     volumes:
       - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data_test:/var/lib/mysql
+      - ./mysql_test.cnf:/etc/mysql/conf.d/mysql_test.cnf:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 40s
+      timeout: 60s
       retries: 10
     ports:
       - "8085:3306"
@@ -69,13 +70,14 @@ services:
     volumes:
       - billing_db_data_test:/var/lib/mysql
       - ../billing/db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
+      - ./mysql_test.cnf:/etc/mysql/conf.d/mysql_test.cnf:ro
     ports:
       - "8087:3306"
     networks:
       - purple_network
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 40s
+      timeout: 60s
       retries: 10
 
   # ================================

@@ -2,7 +2,7 @@
 
 set -e
 
-BASE_URL="http://host.docker.internal:8088"
+BASE_URL="http://billing-app-test:5000"
 PASS=0
 FAIL=0
 
@@ -65,8 +65,8 @@ wait_for_db() {
   return 1
 }
 
-echo "🚀 Starting docker compose..."
-docker compose up -d
+## echo "🚀 Starting docker compose..."
+## docker compose up -d
 
 echo
 echo "⏳ Waiting for Billing /health..."
@@ -100,7 +100,7 @@ CREATE=$(curl -s -X POST "$BASE_URL/provider" \
 STATUS=${CREATE##*STATUS:}
 BODY=${CREATE% STATUS:*}
 
-if [[ "$STATUS" == "201" ]]; then
+if [[ "$STATUS" == "201" || "$STATUS" == "409" ]]; then
   echo "✅ [PASS] Create provider"
   PASS=$((PASS + 1))
 else

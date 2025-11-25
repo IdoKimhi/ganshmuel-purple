@@ -1,0 +1,10 @@
+[mysqld]
+# --- OPTIMIZATION FOR CI/TESTING ---
+# 1. Skip expensive disk sync (massive speed boost)
+skip-log-bin
+innodb_flush_log_at_trx_commit=0
+sync_binlog=0
+
+# 2. Reduce buffer pool size for minimal test data
+innodb_buffer_pool_size=16M
+innodb_log_file_size=5M

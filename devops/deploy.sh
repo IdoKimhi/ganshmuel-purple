@@ -10,6 +10,43 @@ cd "$REPO_ROOT/devops" || exit 1
 echo "=== CI STARTED ==="
 echo "Branch: $BRANCH"
 
+wait_for_service() {
+    local service_name="$1"
+    local port="$2"
+    echo "⏳ Waiting for $service_name on $port to be healthy..."
+    for i in {1..20}; do
+        # Use service name (container-to-container)
+        code=$(curl -s -o /dev/null -w "%{http_code}" "http://${service_name}:${port}/health" || echo "000")
+        if [[ "$code" == "200" ]]; then
+            echo "✅ $service_name is ready (HTTP 200)"
+            return 0
+        fi
+        echo "Attempt $i: $code"
+        sleep 2
+    done
+    echo "❌ $service_name did not become ready in time."
+    return 1
+}
+
+wait_for_schema() {
+    local service_name="$1"
+    local port="$2"
+    local endpoint="$3"
+    echo "⏳ Waiting for $service_name schema via $endpoint..."
+    for i in {1..30}; do # Increased attempts to 30 (60 seconds)
+        # We need to successfully execute a DB-dependent query.
+        code=$(curl -s -o /dev/null -w "%{http_code}" "http://${service_name}:${port}${endpoint}" || echo "000")
+        if [[ "$code" == "200" ]]; then
+            echo "✅ $service_name schema is ready (HTTP 200)"
+            return 0
+        fi
+        echo "Attempt $i: $code"
+        sleep 2
+    done
+    echo "❌ $service_name schema did not become ready in time."
+    return 1
+}
+
 # 1. Setup Environment
 echo "Loading environment variables..."
 set -a
@@ -20,11 +57,20 @@ set +a
 
 # 2. Reset Test Environment
 echo "Resetting Test Environment..."
-docker compose -f docker-compose-test.yml down
+docker compose -f docker-compose-test.yml down -v
 docker compose -f docker-compose-test.yml up -d --build
 
-#this is dumb
-sleep 25
+
+# Wait for the Weight Service to be ready before testing
+# if ! wait_for_service weight-app-test 5000; then
+#     echo "Fatal: Weight service failed to start, aborting CI."
+#     exit 1
+# fi
+if ! wait_for_schema weight-app-test 5000 "/unknown"; then
+    echo "Fatal: Weight service schema is not ready, aborting CI."
+    exit 1
+fi
+
 
 # 3. Define Test Logic
 FAILED=0

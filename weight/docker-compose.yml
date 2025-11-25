@@ -11,10 +11,7 @@ services:
       # CHANGED: Path is now local to this folder
       - ./db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data:/var/lib/mysql
-    healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
-      timeout: 40s
-      retries: 10
+      - ./weight_test.cnf:/etc/mysql/conf.d/weight_test.cnf:ro
     ports:
       - "${WEIGHT_DB_HOST_PORT}:3306"
     networks:
@@ -34,7 +31,7 @@ services:
       - ./in:/in
     depends_on:
       weight-db:
-        condition: service_healthy
+        condition: service_started
     environment:
       WEIGHT_DB_HOST: ${WEIGHT_DB_HOST}
       WEIGHT_DB_USER: ${WEIGHT_DB_USER}
