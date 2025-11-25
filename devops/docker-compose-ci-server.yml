@@ -1,5 +1,5 @@
-services:
-  ci_server:
+ci_server:
+  #instructs docker compose to build an an image from devops/dockerfile
     build:
       context: .
       dockerfile: dockerfile
@@ -7,14 +7,14 @@ services:
     restart: always
 
     ports:
-      - "8080:8080"
-
+    - "8080:8080"
     env_file:
       - .env
       - recipient_config.env
-
+    #provision for docker.sock
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ../:/app_root:rw 
 
     working_dir: /app_root/devops
 
