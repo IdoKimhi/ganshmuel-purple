@@ -1,18 +1,22 @@
 networks:
   purple_network:
     driver: bridge
+<<<<<<< HEAD
   # RE-ADDED: Docker Compose requires this network to be defined if any service refers to it,
   # even if it's just an alias or linked to another network.
   billing_network:
     external: true
     name: purple_network
+=======
+>>>>>>> dev
 
 volumes:
-  weight_data:
-  billing_db_data:
+  weight_data_test:
+  billing_db_data_test:
 
 services:
 
+<<<<<<< HEAD
   # ===============================
   #           WEIGHT DB
   # ===============================
@@ -27,11 +31,27 @@ services:
       - weight_data:/var/lib/mysql
     environment: # <-- Correctly defined:
       TZ: Asia/Jerusalem # <-- All variables are indented under this line
+=======
+  # ================================
+  #           WEIGHT DB (TEST)
+  # ================================
+  weight-db-test:
+    image: mysql:8.0
+    container_name: weight-db-test
+    restart: always
+    environment:
+>>>>>>> dev
       MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
-      DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
-      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
+    volumes:
+      - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
+      - weight_data_test:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 40s
+      retries: 10
     ports:
+<<<<<<< HEAD
       - ${WEIGHT_DB_HOST_PORT}:${WEIGHT_DB_CONTAINER_PORT}
     # ADDED: Override or set healthcheck to ensure enough time for DB initialization
     healthcheck:
@@ -91,10 +111,74 @@ services:
       - billing_network
     environment:
       TZ: Asia/Jerusalem
+=======
+      - "8085:3306"
+    networks:
+      - purple_network
+
+  # ================================
+  #           WEIGHT APP (TEST)
+  # ================================
+  weight-app-test:
+    build: ../weight
+    container_name: weight-app-test
+    restart: always
+    depends_on:
+      weight-db-test:
+        condition: service_healthy
+    environment:
+      WEIGHT_DB_HOST: weight-db-test
+      WEIGHT_DB_USER: ${WEIGHT_DB_USER}
+      WEIGHT_DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
+      WEIGHT_MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
+      WEIGHT_DB_CONTAINER_PORT: 3306
+    volumes:
+      - ../weight/app:/app
+      - ../weight/in:/in
+    ports:
+      - "8086:5000"
+    networks:
+      - purple_network
+
+  # ================================
+  #           BILLING DB (TEST)
+  # ================================
+  billing-db-test:
+    image: mysql:8.0
+    container_name: billing-db-test
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}
+    volumes:
+      - billing_db_data_test:/var/lib/mysql
+      - ../billing/db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
+    ports:
+      - "8087:3306"
+    networks:
+      - purple_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 40s
+      retries: 10
+
+  # ================================
+  #           BILLING APP (TEST)
+  # ================================
+  billing-app-test:
+    image: lironsaada/billing.svc:4
+    container_name: billing-app-test
+    restart: always
+    depends_on:
+      billing-db-test:
+        condition: service_healthy
+    environment:
+      DB_HOST: billing-db-test
+>>>>>>> dev
       DB_USER: ${BILLING_DB_USER}
       DB_PASSWORD: ${BILLING_DB_PASSWORD}
-      DB_HOST: ${BILLING_DB_HOST}
       DB_NAME: ${BILLING_DB_NAME}
+<<<<<<< HEAD
       DB_PORT: ${BILLING_DB_PORT}
       # INTER-SERVICE LINK: Communication must use the internal container port (5000)
       WEIGHT_SERVICE_URL: http://weight-app:5000 
@@ -103,3 +187,15 @@ services:
       - ../billing/rates:/in
     ports:
       - 8088:5000 # Hardcoded port for billing test to run on
+=======
+      DB_PORT: 3306
+      WEIGHT_SERVICE_URL: http://weight-app-test:5000
+      RATES_DIR: ${RATES_DIR}
+      PORT: ${BILLING_SVC_PORT}
+    volumes:
+      - ../billing/in:/in
+    ports:
+      - "8088:${BILLING_SVC_PORT}"
+    networks:
+      - purple_network
+>>>>>>> dev
