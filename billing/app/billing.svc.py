@@ -13,29 +13,22 @@ from openpyxl import load_workbook, Workbook
 # -------------------------------------------------------------------
 
 def require_env(name: str) -> str:
-    """
-    Get a required environment variable.
-    Raise a clear error if it's missing.
-    """
+    """Require an environment variable or crash with clear error."""
     value = os.environ.get(name)
-    if value is None:
+    if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
 
 DB_CONFIG = {
-    "host": require_env("DB_HOST"),
-    "user": require_env("DB_USER"),
-    "password": require_env("DB_PASSWORD"),
-    "database": require_env("DB_NAME"),
-    "port": int(require_env("DB_PORT")),
+    "host":      require_env("DB_HOST"),
+    "user":      require_env("DB_USER"),
+    "password":  require_env("DB_PASSWORD"),
+    "database":  require_env("DB_NAME"),
+    "port":      int(require_env("DB_PORT")),
 }
 
-# Base URL of Weight service, e.g. "http://weight:5000"
 WEIGHT_SERVICE_URL = require_env("WEIGHT_SERVICE_URL")
-
-# Directory inside container where rates files live (mounted volume)
 RATES_DIR = require_env("RATES_DIR")
-
 
 def create_app() -> Flask:
     app = Flask(__name__)
@@ -85,11 +78,11 @@ def create_app() -> Flask:
     def get_produce_for_session(session_id: str, t1: str, t2: str) -> Optional[str]:
         """
         Fallback for getting the product/produce of a session when /session/<id>
-        does not return it (per the official Weight spec).
+        does not return it.
 
         Strategy:
         - Call GET /weight?from=t1&to=t2
-        - Look for an entry whose id matches session_id
+        - Look for an entry whose *session_id* matches our session_id
         - Return its 'produce' field if found
         """
         try:
@@ -104,8 +97,8 @@ def create_app() -> Flask:
             return None
 
         for w in weights:
-            # Assuming the 'id' from GET /weight matches the session id we have
-            if str(w.get("id")) == str(session_id):
+            # NOW we compare against session_id, not id
+            if str(w.get("session_id")) == str(session_id):
                 return w.get("produce")
 
         return None
@@ -428,7 +421,6 @@ def create_app() -> Flask:
             return jsonify({"error": "failed to reach Weight service", "details": str(e)}), 502
 
         return jsonify(data), 200
-
     # ---------------------------------------------------------------
     # Billing
     # ---------------------------------------------------------------
@@ -465,20 +457,32 @@ def create_app() -> Flask:
         rates: List[Dict[str, Any]], product_id: str, provider_id: int
     ) -> Optional[int]:
         """
-        Scoped rate has higher precedence than ALL.
+        Scoped rate has higher precedence than ALL (global).
+        Scope matching is case-insensitive for 'ALL'.
         """
         scoped_rate = None
         all_rate = None
+
         for r in rates:
             if r["product_id"] != product_id:
                 continue
-            if r["scope"] == "ALL":
+
+            # Normalize scope
+            scope_raw = r.get("scope")
+            scope = str(scope_raw).strip() if scope_raw is not None else ""
+
+            # Global rate (ALL, All, all, etc.)
+            if scope.upper() == "ALL":
                 if all_rate is None:
                     all_rate = r["rate"]
-            elif str(r["scope"]) == str(provider_id):
+
+            # Provider-specific rate
+            elif scope == str(provider_id):
                 if scoped_rate is None:
                     scoped_rate = r["rate"]
+
         return scoped_rate if scoped_rate is not None else all_rate
+
 
     @app.route("/bill/<int:provider_id>", methods=["GET"])
     def get_bill(provider_id: int):
@@ -599,5 +603,5 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     app = create_app()
-    port = int(require_env("PORT"))
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)

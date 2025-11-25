@@ -155,6 +155,7 @@ def format_transaction_row(row):
     """Format a transaction DB row for API response."""
     return {
         "id": row['id'],
+        "session_id": row['session_id'], 
         "direction": row['direction'],
         "truck": row['truck'] or "na",
         "bruto": row['bruto'],
@@ -281,7 +282,7 @@ def get_weight():
 
     placeholders = ','.join(['%s'] * len(directions))
     query = f"""
-        SELECT id, direction, truck, bruto, neto, produce, containers 
+        SELECT id,session_id, direction, truck, bruto, neto, produce, containers 
         FROM transactions 
         WHERE datetime BETWEEN %s AND %s AND direction IN ({placeholders})
         ORDER BY datetime DESC
