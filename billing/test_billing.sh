@@ -66,7 +66,17 @@ wait_for_db() {
 }
 
 echo "🚀 Starting docker compose..."
-docker compose up -d
+# Check if containers are already running (e.g., started by deploy.sh)
+if docker ps --format '{{.Names}}' | grep -q "billing-app-test\|billing-db-test"; then
+  echo "✅ Containers already running, skipping docker compose"
+else
+  # Try to use local docker-compose.yml if it exists, otherwise assume containers are managed externally
+  if [ -f "docker-compose.yml" ]; then
+    docker compose up -d
+  else
+    echo "⚠️  No docker-compose.yml found. Assuming containers are already running."
+  fi
+fi
 
 echo
 echo "⏳ Waiting for Billing /health..."
