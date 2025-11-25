@@ -50,7 +50,7 @@ services:
       WEIGHT_DB_CONTAINER_PORT: 3306
     volumes:
       - ../weight/app:/app
-      - ../weight/in:/in
+      #- ../weight/in:/in
     ports:
       - "8086:5000"
     networks:
