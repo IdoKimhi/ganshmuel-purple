@@ -1,8 +1,104 @@
 const API_BASE = 'http://localhost:8086';
 
-// Form submission
+// ========================================
+// TOAST NOTIFICATION SYSTEM
+// ========================================
+function showToast(title, message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    const icon = type === 'success' ? '✓' : type === 'error' ? '✗' : '⚠';
+
+    toast.innerHTML = `
+        <div class="toast-icon">${icon}</div>
+        <div class="toast-content">
+            <div class="toast-title">${title}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+        <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+    `;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
+// ========================================
+// LOADING OVERLAY
+// ========================================
+function showLoading() {
+    document.getElementById('loadingOverlay').classList.remove('hidden');
+}
+
+function hideLoading() {
+    document.getElementById('loadingOverlay').classList.add('hidden');
+}
+
+// ========================================
+// STATISTICS DASHBOARD
+// ========================================
+async function updateStatistics() {
+    // Transactions
+    try {
+        const response = await fetch(`${API_BASE}/weight`);
+        if (response.ok) {
+            const data = await response.json();
+            // Show total transactions count
+            document.getElementById('statEntries').textContent = data.length || '0';
+        }
+    } catch (error) {
+        document.getElementById('statEntries').textContent = '--';
+    }
+
+    // Unknown Containers
+    try {
+        const unknownResponse = await fetch(`${API_BASE}/unknown`);
+        const containers = await unknownResponse.json();
+        document.getElementById('statUnknown').textContent = containers.length;
+        document.getElementById('statUnknown').style.color = containers.length > 0 ? 'var(--warning)' : 'var(--success)';
+    } catch (error) {
+        document.getElementById('statUnknown').textContent = '--';
+    }
+}
+
+// ========================================
+// FORM VALIDATION
+// ========================================
+function validateField(fieldId, errorId, validator) {
+    const field = document.getElementById(fieldId);
+    const error = document.getElementById(errorId);
+
+    if (!validator(field.value)) {
+        error.textContent = 'This field is required';
+        field.style.borderColor = 'var(--error)';
+        return false;
+    } else {
+        error.textContent = '';
+        field.style.borderColor = '';
+        return true;
+    }
+}
+
+// ========================================
+// FORM SUBMISSION
+// ========================================
 document.getElementById('weightForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    // Validate required fields
+    const isDirectionValid = validateField('direction', 'directionError', val => val !== '');
+    const isTruckValid = validateField('truck', 'truckError', val => val.trim() !== '');
+    const isProduceValid = validateField('produce', 'produceError', val => val.trim() !== '');
+    const isWeightValid = validateField('weight', 'weightError', val => val > 0);
+
+    if (!isDirectionValid || !isTruckValid || !isProduceValid || !isWeightValid) {
+        showToast('Validation Error', 'Please fill in all required fields', 'error');
+        return;
+    }
 
     const data = {
         direction: document.getElementById('direction').value,
@@ -14,6 +110,10 @@ document.getElementById('weightForm').addEventListener('submit', async (e) => {
         force: document.getElementById('force').checked
     };
 
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    showLoading();
+
     try {
         const response = await fetch(`${API_BASE}/weight`, {
             method: 'POST',
@@ -22,26 +122,25 @@ document.getElementById('weightForm').addEventListener('submit', async (e) => {
         });
 
         const result = await response.json();
-        const messageDiv = document.getElementById('formMessage');
 
         if (response.ok) {
-            messageDiv.className = 'message success';
-            messageDiv.textContent = `✓ Success! ID: ${result.id}`;
+            showToast('Success!', 'Weight entry submitted successfully', 'success');
             document.getElementById('weightForm').reset();
-            refreshTransactions();
+            updateStatistics(); // Refresh stats after new entry
         } else {
-            messageDiv.className = 'message error';
-            messageDiv.textContent = `✗ Error: ${result.error || 'Unknown error'}`;
+            showToast('Error', result.error || 'Unknown error occurred', 'error');
         }
-
-        setTimeout(() => messageDiv.textContent = '', 5000);
     } catch (error) {
-        document.getElementById('formMessage').className = 'message error';
-        document.getElementById('formMessage').textContent = `✗ Network error: ${error.message}`;
+        showToast('Network Error', error.message, 'error');
+    } finally {
+        submitBtn.disabled = false;
+        hideLoading();
     }
 });
 
-// Get unknown containers
+// ========================================
+// UNKNOWN CONTAINERS CHECK
+// ========================================
 async function getUnknownContainers() {
     try {
         const response = await fetch(`${API_BASE}/unknown`);
@@ -49,53 +148,65 @@ async function getUnknownContainers() {
 
         const div = document.getElementById('unknownContainers');
         if (containers.length === 0) {
-            div.innerHTML = '<p class="message success">✓ All containers are registered!</p>';
+            div.innerHTML = '<p class="message success">✓ All containers are registered</p>';
         } else {
-            div.innerHTML = `<p class="message warning">⚠ Unknown containers: <strong>${containers.join(', ')}</strong></p>`;
+            div.innerHTML = `<p class="message warning">⚠ Unregistered containers detected: <strong>${containers.join(', ')}</strong></p>`;
         }
 
         setTimeout(() => div.innerHTML = '', 10000);
+        updateStatistics(); // Refresh stats after check
     } catch (error) {
-        console.error('Error fetching unknown containers:', error);
+        const div = document.getElementById('unknownContainers');
+        div.innerHTML = '<p class="message error">✗ Unable to validate containers</p>';
+        setTimeout(() => div.innerHTML = '', 5000);
     }
 }
 
-// Refresh transactions
-async function refreshTransactions() {
-    const filters = [];
-    if (document.getElementById('filterIn').checked) filters.push('in');
-    if (document.getElementById('filterOut').checked) filters.push('out');
-    if (document.getElementById('filterNone').checked) filters.push('none');
-
+// ========================================
+// SYSTEM HEALTH CHECK
+// ========================================
+async function checkSystemStatus() {
     try {
-        const response = await fetch(`${API_BASE}/weight?filter=${filters.join(',')}`);
-        const transactions = await response.json();
+        const response = await fetch(`${API_BASE}/health`);
+        const div = document.getElementById('systemStatus');
 
-        const tbody = document.getElementById('transactionsBody');
-
-        if (transactions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty">No transactions found</td></tr>';
-            return;
+        if (response.ok) {
+            div.innerHTML = '<p class="message success">✓ System operational - Database connected</p>';
+        } else {
+            div.innerHTML = '<p class="message error">✗ System health check failed</p>';
         }
 
-        tbody.innerHTML = transactions.map(t => `
-            <tr>
-                <td>${t.id}</td>
-                <td><span class="badge badge-${t.direction}">${t.direction.toUpperCase()}</span></td>
-                <td>${t.truck || 'N/A'}</td>
-                <td>${t.bruto}</td>
-                <td>${t.neto === 'na' ? '<span class="na">N/A</span>' : t.neto}</td>
-                <td>${t.produce}</td>
-                <td>${t.containers.length > 0 ? t.containers.join(', ') : '-'}</td>
-            </tr>
-        `).join('');
+        setTimeout(() => div.innerHTML = '', 5000);
     } catch (error) {
-        console.error('Error fetching transactions:', error);
-        document.getElementById('transactionsBody').innerHTML =
-            '<tr><td colspan="7" class="error">Error loading transactions</td></tr>';
+        const div = document.getElementById('systemStatus');
+        div.innerHTML = '<p class="message error">✗ System unavailable</p>';
+        setTimeout(() => div.innerHTML = '', 5000);
     }
 }
 
+// ========================================
+// INITIALIZATION
+// ========================================
+window.addEventListener('load', () => {
+    updateStatistics();
+});
 
-// Load transactions on page load
-window.addEventListener('load', refreshTransactions);
+// Real-time validation on blur
+['direction', 'truck', 'produce', 'weight'].forEach(fieldId => {
+    const field = document.getElementById(fieldId);
+    const errorId = fieldId + 'Error';
+
+    field.addEventListener('blur', () => {
+        if (field.value) {
+            validateField(fieldId, errorId, val => val.trim() !== '' && (fieldId !== 'weight' || val > 0));
+        }
+    });
+
+    field.addEventListener('input', () => {
+        const error = document.getElementById(errorId);
+        if (error.textContent) {
+            error.textContent = '';
+            field.style.borderColor = '';
+        }
+    });
+});
