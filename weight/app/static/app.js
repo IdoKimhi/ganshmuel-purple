@@ -1,5 +1,5 @@
-const API_BASE = 'http://localhost:8086';
-
+//const API_BASE = 'http://localhost:8086';
+const API_BASE='http://15.206.113.164:8086';
 // ========================================
 // TOAST NOTIFICATION SYSTEM
 // ========================================
