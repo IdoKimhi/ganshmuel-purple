@@ -81,7 +81,7 @@ services:
   #           BILLING APP (PROD)
   # ================================
   billing-app-prod:
-    image: ../billing
+    build: ../billing
     container_name: billing-app-prod
     restart: always
     depends_on:
