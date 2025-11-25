@@ -1,22 +1,18 @@
 version: "3.9"
-ci_server:
-  #instructs docker compose to build an an image from devops/dockerfile
+
+services:
+  ci_server:
     build:
       context: .
       dockerfile: dockerfile
-
     restart: always
-
     ports:
-    - "8080:8080"
+      - "8080:8080"
     env_file:
       - .env
       - recipient_config.env
-    #provision for docker.sock
     volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-    - ../:/app_root:rw 
-
+      - ../:/app_root:rw
+      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app_root/devops
-
     command: ["python", "app.py"]
