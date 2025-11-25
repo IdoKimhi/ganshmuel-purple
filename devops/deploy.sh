@@ -1,136 +1,188 @@
 #!/bin/bash
 
-# Arguments passed from the Flask Webhook Handler
 BRANCH=$1
-PUSHER=$2
-TEAM=$3
+PUSHER=${2:-\"ci_user\"}  # Default value if not provided
+TEAM=${3:-\"devops\"}     # Default value if not provided
 
-# --- Initial Setup and Validation ---
 echo "=== CI STARTED ==="
 echo "Branch from webhook: $BRANCH"
 echo "Pusher: $PUSHER, Team: $TEAM"
 
-# Guardrail: Script only runs for 'dev' branch in this pipeline
-#if [ "$BRANCH" != "dev" ]; then
-#    echo "🚨 ERROR: Deployment script only runs for 'dev' branch. Exiting."
-#    exit 0
-#fi
+# We are testing with the 'ido' branch locally, so we comment out the 'dev' check for now.
+# if [ "$BRANCH" != "dev" ]; then
+#     echo "🚨 ERROR: Deployment script only runs for 'dev' branch. Exiting."
+#     exit 0
+# fi
 
 echo "Pulling latest code..."
 git fetch --all
+# NOTE: The pull should ideally be against the commit hash from the webhook, 
+# but we stick to the branch for this example.
 git pull origin "$BRANCH"
 
-# Save the previous stable commit hash (HEAD^ assumed stable for simple rollback)
-LATEST_STABLE_COMMIT=$(git rev-parse HEAD^)
-CURRENT_COMMIT=$(git rev-parse HEAD)
-echo "Current commit hash: $CURRENT_COMMIT"
-echo "Latest stable commit for rollback: $LATEST_STABLE_COMMIT"
+# Save the current commit hash for rollback later
+LATEST_COMMIT=$(git rev-parse HEAD)
+# Use a static placeholder for the last good commit for initial rollback test
+STABLE_COMMIT="515e1b99c5e447b3bf02c0ef18c797fa6dfa645d"
+echo "Current commit hash: $LATEST_COMMIT"
+echo "Latest stable commit for rollback: $STABLE_COMMIT"
+
 
 echo "Ensuring network exists..."
-docker network create ci-network || true
+docker network create purple_network || true
 
 echo "Loading environment variables for Docker Compose..."
 set -a
+# Assuming .env files are in the parent directory
 source ../weight/.env
 source ../billing/.env
 set +a
 
+# Start the test environment
 echo "Running TEST environment..."
-# Clean up and start test containers
-docker compose -f docker-compose-test.yml down
+# Note: Use -f to specify the files for cleanup and startup
+docker compose -f docker-compose-test.yml down -v --remove-orphans || true # Ensure clean start
 docker compose -f docker-compose-test.yml up -d --build
 
 
-###############################################
-# TEST CONFIGURATION
-###############################################
-echo "Selecting test scripts..."
-# Push to 'dev' runs all critical tests
-TEST_SCRIPTS=(
-    "../weight/e2e_test.py"
-    "../billing/test_billing.sh"
-)
-
 # Array to track failed tests for the email body
 FAILED_TESTS=()
-OVERALL_STATUS="Success"
+OVERALL_STATUS="SUCCESS"
 
 
 ###############################################
-# RUN TEST SCRIPTS
+# HEALTH CHECK WAIT LOOP (CRITICAL FIX)
 ###############################################
-for script in "${TEST_SCRIPTS[@]}"; do
-    echo "-----------------------------------------"
-    echo "Running test script: $script"
-    echo "-----------------------------------------"
+WEIGHT_APP_PORT=8086
+BILLING_APP_PORT=8088
+MAX_WAIT_SECONDS=60
+START_TIME=$(date +%s)
+HEALTHY=0
 
-    SCRIPT_FAILED=0
+echo ""
+echo "⏳ Waiting for microservices to be healthy (max $MAX_WAIT_SECONDS seconds)..."
 
-    # If Python
-    if [[ "$script" == *.py ]]; then
-        if ! python3 "$script"; then
-            SCRIPT_FAILED=1
-        fi
-
-    # If Bash
-    elif [[ "$script" == *.sh ]]; then
-        chmod +x "$script"
-        if ! bash "$script"; then
-            SCRIPT_FAILED=1
-        fi
-
-    else
-        echo "❌ Unknown test type: $script"
-        SCRIPT_FAILED=1
-    fi
+while [ $(($(date +%s) - $START_TIME)) -lt $MAX_WAIT_SECONDS ]; do
+    # Check Weight App Health Check (assuming a /health endpoint exists)
+    WEIGHT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$WEIGHT_APP_PORT/health || echo "000")
     
-    # Handle result
-    if [ "$SCRIPT_FAILED" -eq 1 ]; then
-        echo "❌ Test FAILED: $script"
-        FAILED_TESTS+=("$script")
-        OVERALL_STATUS="Failure"
+    # Check Billing App Health Check (assuming a /health endpoint exists)
+    BILLING_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$BILLING_APP_PORT/health || echo "000")
+
+    if [ "$WEIGHT_STATUS" == "200" ] && [ "$BILLING_STATUS" == "200" ]; then
+        echo "✅ Both services reported healthy. Starting tests."
+        HEALTHY=1
+        break
     fi
+
+    echo -n "."
+    sleep 2
 done
 
+if [ "$HEALTHY" -eq 0 ]; then
+    echo ""
+    echo "❌ CRITICAL FAILURE: Microservices did not become healthy within $MAX_WAIT_SECONDS seconds."
+    # We exit 1 here, triggering the failure flow below.
+    FAILED_TESTS+=("CRITICAL: Services failed to start/become healthy")
+    OVERALL_STATUS="FAILURE"
+fi
 
 ###############################################
-# CI ACTION BASED ON OVERALL STATUS
+# SELECT TESTS BASED ON BRANCH (Simplified for 'ido' test branch)
 ###############################################
+if [ "$OVERALL_STATUS" == "SUCCESS" ]; then
+    echo "Selecting test scripts..."
+    # When pushing to 'ido', run all tests by default
+    TEST_SCRIPTS=(\
+        "../weight/e2e_test.py"\
+        "../billing/test_billing.sh"\
+    )
 
-if [ "$OVERALL_STATUS" = "Failure" ]; then
+
+    ###############################################
+    # RUN TEST SCRIPTS
+    ###############################################
+    for script in "${TEST_SCRIPTS[@]}"; do
+        echo "-----------------------------------------"
+        echo "Running test script: $script"
+        echo "-----------------------------------------"
+
+        # If Python
+        if [[ "$script" == *.py ]]; then
+            echo "→ Running Python test"
+            if ! python3 "$script"; then
+                echo "❌ Python test FAILED: $script"
+                FAILED_TESTS+=("$script")
+                OVERALL_STATUS="FAILURE"
+            fi
+
+        # If Bash
+        elif [[ "$script" == *.sh ]]; then
+            echo "→ Running Bash test"
+            chmod +x "$script"   # Ensure executable
+            if ! bash "$script"; then
+                echo "❌ Bash test FAILED: $script"
+                FAILED_TESTS+=("$script")
+                OVERALL_STATUS="FAILURE"
+            fi
+
+        else
+            echo "❌ Unknown test type: $script"
+            FAILED_TESTS+=("Unknown test type: $script")
+            OVERALL_STATUS="FAILURE"
+        fi
+    done
+fi
+
+
+###############################################
+# CLEANUP (Always run)
+###############################################
+echo ""
+echo "🧹 Cleaning up test environment..."
+docker compose -f docker-compose-test.yml down -v --remove-orphans || true
+
+
+###############################################
+# FINAL STATUS CHECK & EMAIL
+###############################################
+if [ "$OVERALL_STATUS" == "FAILURE" ]; then
     echo "❌ CI FAILED. Running failure actions..."
-
-    # 1. Restore 'dev' branch to latest stable commit
-    echo "Attempting to reset branch '$BRANCH' to stable commit: $LATEST_STABLE_COMMIT"
-    #git reset --hard "$LATEST_STABLE_COMMIT" || {
-    #    echo "CRITICAL WARNING: Rollback failed. Manual intervention required."
+    
+    # 1. Rollback
+    echo "Attempting to reset branch '$BRANCH' to stable commit: $STABLE_COMMIT"
+    #git reset --hard "$STABLE_COMMIT" || {
+    #    echo "WARNING: Could not reset to $STABLE_COMMIT. Manual check required."
     #}
     
-    # 2. Convert FAILED_TESTS array into a single comma-separated string for Python
-    # This prevents quoting issues when passing arrays via the shell -c command.
-    FAILURE_STRING=$(IFS=,; echo "${FAILED_TESTS[*]}")
+    # 2. Build Python arguments string (FIXED SYNTAX ERROR HERE)
+    # Start with mandatory arguments
+    PYTHON_ARGS="'Failure', '$BRANCH', '$PUSHER', '$TEAM'"
     
-    # 3. Send failure email
-    # Arguments: STATUS BRANCH PUSHER TEAM FAILURE_STRING
-    PYTHON_CMD="from email_service import send_ci_status_email_v2; send_ci_status_email_v2('Failure', '$BRANCH', '$PUSHER', '$TEAM', ['$FAILURE_STRING'])"
+    # Append failure details, quoted correctly
+    for failure in "${FAILED_TESTS[@]}"; do
+        # Appends the failure item as a quoted string argument
+        PYTHON_ARGS="${PYTHON_ARGS}, '$failure'"
+    done
     
-    python3 -c "$PYTHON_CMD"
-    
+    # Send failure email 
+    # Use the constructed string to call the function
+    python3 -c "from email_service import send_ci_status_email_v2; send_ci_status_email_v2($PYTHON_ARGS)"\
+        || echo "WARNING: Email sending failed. Check email_service.py."
+
     echo "=== CI COMPLETED WITH FAILURE ==="
-    # Exit with code 1 so app.py knows the CI pipeline failed.
-    exit 1 
+    exit 1
 
 else
     echo "✅ All tests PASSED for branch: $BRANCH"
     
-    # 1. Simulate creation of Pull Request from dev to main
+    # 1. Simulating Pull Request
     echo "Simulating creation of Pull Request from $BRANCH to main..."
     
     # 2. Send success email
-    PYTHON_CMD="from email_service import send_ci_status_email_v2; send_ci_status_email_v2('Success', '$BRANCH', '$PUSHER', '$TEAM')"
-    python3 -c "$PYTHON_CMD"
+    python3 -c "from email_service import send_ci_status_email_v2; send_ci_status_email_v2('Success', '$BRANCH', '$PUSHER', '$TEAM')"\
+        || echo "WARNING: Email sending failed. Check email_service.py."
     
     echo "=== CI COMPLETED WITH SUCCESS ==="
-    # Exit with code 0 to signal success to app.py.
-    exit 0 
+    exit 0
 fi
