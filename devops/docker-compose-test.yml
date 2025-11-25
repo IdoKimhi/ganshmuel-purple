@@ -1,105 +1,88 @@
-version: "3.9"
 
 networks:
   purple_network:
     driver: bridge
 
+  billing_network:
+    external: true
+    name: purple_network
+
 volumes:
-  weight_data_test:
-  billing_db_data_test:
+  weight_data:
+  billing_db_data:
 
 services:
 
   # ================================
-  #           WEIGHT DB (TEST)
+  #           WEIGHT DB
   # ================================
-  weight-db-test:
-    image: mysql:8.0
-    container_name: weight-db-test
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
+  weight-db:
+    extends:
+      file: ../weight/docker-compose.yml
+      service: weight-db
+    networks:
+      - purple_network
     volumes:
       - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
-      - weight_data_test:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 40s
-      retries: 10
+      - weight_data:/var/lib/mysql
+    environment: # <-- Correctly defined:
+      TZ: Asia/Jerusalem # <-- All variables are indented under this line
+      MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
+      DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
+      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
     ports:
-      - "8085:3306"
+      - ${WEIGHT_DB_HOST_PORT}:${WEIGHT_DB_CONTAINER_PORT}
+      
+  # ================================
+  #           WEIGHT APP
+  # ================================
+  weight-app:
+    extends:
+      file: ../weight/docker-compose.yml
+      service: weight-app
     networks:
       - purple_network
-
+    environment: # <-- Correctly defined:
+      TZ: Asia/Jerusalem # <-- All variables are indented under this line
+      DB_USER: ${WEIGHT_DB_USER}
+      DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
+      DB_HOST: ${WEIGHT_DB_HOST}      
+      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
+ # ================================
+  #           billing DB
   # ================================
-  #           WEIGHT APP (TEST)
-  # ================================
-  weight-app-test:
-    build: ../weight
-    container_name: weight-app-test
-    restart: always
-    depends_on:
-      weight-db-test:
-        condition: service_healthy
-    environment:
-      WEIGHT_DB_HOST: weight-db-test
-      WEIGHT_DB_USER: ${WEIGHT_DB_USER}
-      WEIGHT_DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
-      WEIGHT_MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
-      WEIGHT_DB_CONTAINER_PORT: 3306
-    volumes:
-      - ../weight/app:/app
-      - ../weight/in:/in
-    ports:
-      - "8086:5000"
+  billing-db:
+    extends:
+      file: ../billing/docker-compose.yml
+      service: billing-db
     networks:
       - purple_network
-
-  # ================================
-  #           BILLING DB (TEST)
-  # ================================
-  billing-db-test:
-    image: mysql:8.0
-    container_name: billing-db-test
-    restart: always
-    environment:
+    environment: # <-- Correctly defined:
+      TZ: Asia/Jerusalem # <-- All variables are indented under this line
       MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}
-    volumes:
-      - billing_db_data_test:/var/lib/mysql
-      - ../billing/db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
+      MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}   
+      DB_PORT: ${BILLING_DB_PORT}
     ports:
-      - "8087:3306"
+      - ${BILLING_DB_HOST_PORT}:${BILLING_DB_PORT}           
+
+ # ================================
+  #           billing APP
+  # ================================
+  billing:
+    extends:
+      file: ../billing/docker-compose.yml
+      service: billing
     networks:
       - purple_network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 40s
-      retries: 10
-
-  # ================================
-  #           BILLING APP (TEST)
-  # ================================
-  billing-app-test:
-    image: lironsaada/billing.svc:4
-    container_name: billing-app-test
-    restart: always
-    depends_on:
-      billing-db-test:
-        condition: service_healthy
-    environment:
-      DB_HOST: billing-db-test
+    environment: # <-- Correctly defined:
+      TZ: Asia/Jerusalem # <-- All variables are indented under this line
       DB_USER: ${BILLING_DB_USER}
       DB_PASSWORD: ${BILLING_DB_PASSWORD}
+      DB_HOST: ${BILLING_DB_HOST}
       DB_NAME: ${BILLING_DB_NAME}
-      DB_PORT: 3306
-      WEIGHT_SERVICE_URL: http://weight-app-test:5000
-      RATES_DIR: ${RATES_DIR}
-      PORT: ${BILLING_SVC_PORT}
-    volumes:
-      - ../billing/in:/in
+      DB_PORT: ${BILLING_DB_PORT}
+      WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL}
+      BILLING_SVC_PORT: ${BILLING_SVC_PORT}  
     ports:
-      - "8088:${BILLING_SVC_PORT}"
-    networks:
-      - purple_network
+      - ${BILLING_HOST_PORT}:${BILLING_SVC_PORT}
