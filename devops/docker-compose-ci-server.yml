@@ -1,5 +1,4 @@
 version: "3.9"
-#test
 services:
   ci_server:
     build:
