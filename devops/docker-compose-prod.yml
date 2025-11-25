@@ -1,10 +1,7 @@
 networks:
   purple_network:
     driver: bridge
-
-  billing_network:
     external: true
-    name: purple_network
 
 volumes:
   weight_data:
@@ -13,7 +10,7 @@ volumes:
 services:
 
   # ================================
-  #           WEIGHT DB
+  #           WEIGHT DB (PROD)
   # ================================
   weight-db:
     extends:
@@ -22,25 +19,24 @@ services:
 
     container_name: weight-db-prod
 
-    # OVERRIDE מוחלט — רשת אחת בלבד
     networks:
       - purple_network
 
     environment:
       TZ: Asia/Jerusalem
-      MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
-      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
+      MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD_PROD}
+      MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE_PROD}
+      DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
 
     volumes:
       - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data:/var/lib/mysql
 
     ports:
-      - "8081:${WEIGHT_DB_CONTAINER_PORT}"
+      - "${WEIGHT_DB_HOST_PORT_PROD}:${WEIGHT_DB_CONTAINER_PORT}"
 
   # ================================
-  #           WEIGHT APP
+  #           WEIGHT APP (PROD)
   # ================================
   weight-app:
     extends:
@@ -49,22 +45,21 @@ services:
 
     container_name: weight-app-prod
 
-    # OVERRIDE מוחלט
     networks:
       - purple_network
 
     environment:
       TZ: Asia/Jerusalem
-      DB_USER: ${WEIGHT_DB_USER}
-      DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
-      DB_HOST: ${WEIGHT_DB_HOST}
-      WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
+      DB_USER: ${WEIGHT_DB_USER_PROD}
+      DB_PASSWORD: ${WEIGHT_DB_PASSWORD_PROD}
+      DB_HOST: ${WEIGHT_DB_HOST_PROD}
+      DB_PORT: ${WEIGHT_DB_CONTAINER_PORT}
 
     ports:
-      - "8082:5000"
+      - "${WEIGHT_APP_HOST_PORT_PROD}:5000"
 
   # ================================
-  #           BILLING DB
+  #           BILLING DB (PROD)
   # ================================
   billing-db:
     extends:
@@ -73,21 +68,20 @@ services:
 
     container_name: billing-db-prod
 
-    # OVERRIDE מוחלט
     networks:
       - purple_network
 
     environment:
       TZ: Asia/Jerusalem
-      MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}
-      DB_PORT: ${BILLING_DB_PORT}
+      MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD_PROD}
+      MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE_PROD}
+      DB_PORT: ${BILLING_DB_PORT_PROD}
 
     ports:
-      - "8083:${BILLING_DB_PORT}"
+      - "${BILLING_DB_HOST_PORT_PROD}:${BILLING_DB_PORT_PROD}"
 
   # ================================
-  #           BILLING APP
+  #           BILLING APP (PROD)
   # ================================
   billing:
     extends:
@@ -96,20 +90,19 @@ services:
 
     container_name: billing-app-prod
 
-    # OVERRIDE מוחלט
     networks:
       - purple_network
 
     environment:
       TZ: Asia/Jerusalem
-      DB_USER: ${BILLING_DB_USER}
-      DB_PASSWORD: ${BILLING_DB_PASSWORD}
-      DB_HOST: ${BILLING_DB_HOST}
-      DB_NAME: ${BILLING_DB_NAME}
-      DB_PORT: ${BILLING_DB_PORT}
-      WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL}
-      BILLING_SVC_PORT: ${BILLING_SVC_PORT}
+      DB_USER: ${BILLING_DB_USER_PROD}
+      DB_PASSWORD: ${BILLING_DB_PASSWORD_PROD}
+      DB_HOST: ${BILLING_DB_HOST_PROD}
+      DB_NAME: ${BILLING_DB_NAME_PROD}
+      DB_PORT: ${BILLING_DB_PORT_PROD}
+      WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL_PROD}
+      BILLING_SVC_PORT: ${BILLING_SVC_PORT_PROD}
       RATES_DIR: /app/rates
 
     ports:
-      - "8084:${BILLING_SVC_PORT}"
+      - "${BILLING_HOST_PORT_PROD}:${BILLING_SVC_PORT_PROD}"
