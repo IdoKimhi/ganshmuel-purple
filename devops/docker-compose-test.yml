@@ -1,8 +1,8 @@
-
 networks:
   purple_network:
     driver: bridge
-
+  # RE-ADDED: Docker Compose requires this network to be defined if any service refers to it,
+  # even if it's just an alias or linked to another network.
   billing_network:
     external: true
     name: purple_network
@@ -13,9 +13,9 @@ volumes:
 
 services:
 
-  # ================================
+  # ===============================
   #           WEIGHT DB
-  # ================================
+  # ===============================
   weight-db:
     extends:
       file: ../weight/docker-compose.yml
@@ -33,56 +33,73 @@ services:
       WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
     ports:
       - ${WEIGHT_DB_HOST_PORT}:${WEIGHT_DB_CONTAINER_PORT}
-      
-  # ================================
+    # ADDED: Override or set healthcheck to ensure enough time for DB initialization
+    healthcheck:
+      # Use the default MySQL health check command
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      # CRITICAL FIX: Give the DB 30 seconds to initialize before checks begin
+      start_period: 30s 
+  # ===============================
   #           WEIGHT APP
-  # ================================
+  # ===============================
   weight-app:
     extends:
       file: ../weight/docker-compose.yml
       service: weight-app
     networks:
       - purple_network
-    environment: # <-- Correctly defined:
-      TZ: Asia/Jerusalem # <-- All variables are indented under this line
+    environment:
+      TZ: Asia/Jerusalem
       DB_USER: ${WEIGHT_DB_USER}
       DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
       DB_HOST: ${WEIGHT_DB_HOST}      
       WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
- # ================================
+    # EXPOSED PORT: Required for the host-based e2e_test.py script to reach the app.
+    ports:
+      - ${WEIGHT_APP_HOST_PORT}:5000 
+      
+  # ===============================
   #           billing DB
-  # ================================
+  # ===============================
   billing-db:
     extends:
       file: ../billing/docker-compose.yml
       service: billing-db
     networks:
       - purple_network
-    environment: # <-- Correctly defined:
-      TZ: Asia/Jerusalem # <-- All variables are indented under this line
+    environment:
+      TZ: Asia/Jerusalem
       MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}   
       DB_PORT: ${BILLING_DB_PORT}
     ports:
       - ${BILLING_DB_HOST_PORT}:${BILLING_DB_PORT}           
 
- # ================================
+  # ===============================
   #           billing APP
-  # ================================
+  # ===============================
   billing:
     extends:
       file: ../billing/docker-compose.yml
       service: billing
+    # The original file referred to `billing_network`, so we must include it here
     networks:
       - purple_network
-    environment: # <-- Correctly defined:
-      TZ: Asia/Jerusalem # <-- All variables are indented under this line
+      - billing_network
+    environment:
+      TZ: Asia/Jerusalem
       DB_USER: ${BILLING_DB_USER}
       DB_PASSWORD: ${BILLING_DB_PASSWORD}
       DB_HOST: ${BILLING_DB_HOST}
       DB_NAME: ${BILLING_DB_NAME}
       DB_PORT: ${BILLING_DB_PORT}
-      WEIGHT_SERVICE_URL: ${WEIGHT_SERVICE_URL}
-      BILLING_SVC_PORT: ${BILLING_SVC_PORT}  
+      # INTER-SERVICE LINK: Communication must use the internal container port (5000)
+      WEIGHT_SERVICE_URL: http://weight-app:5000 
+      RATES_DIR: ${RATES_DIR}
+    volumes:
+      - ../billing/rates:/in
     ports:
-      - ${BILLING_HOST_PORT}:${BILLING_SVC_PORT}
+      - 8088:5000 # Hardcoded port for billing test to run on
