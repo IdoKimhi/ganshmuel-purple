@@ -9,11 +9,7 @@ cd /app_root || exit 1
 git fetch --all
 git pull origin "$BRANCH"
 
-echo "Pulling latest code ON HOST (this is the one that matters)..."
-docker run --rm \
-    -v /home/ubuntu/ganshmuel-purple:/repo \
-    -w /repo \
-    alpine/git pull origin "$BRANCH"
+
 
 
 
