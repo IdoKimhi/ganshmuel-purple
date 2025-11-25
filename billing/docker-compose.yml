@@ -6,8 +6,6 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}
-    ports:
-      - "${BILLING_DB_HOST_PORT}:3306"
     volumes:
       - billing_db_data:/var/lib/mysql
       - ./db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
