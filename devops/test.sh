@@ -1,2 +1,2 @@
-echo 'hexz world again!!!'
-'
+echo 'hexz world again!!'
+    echo "Ensuring network exists..."
