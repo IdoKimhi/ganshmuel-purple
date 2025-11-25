@@ -1,141 +1,93 @@
-from flask import Flask, request, jsonify
-from email_service import send_notification_email, send_simple_alert_email, send_team_notification
-#from self_update import trigger_update_async 
-import json
-import os
 import subprocess
-import threading
-from dotenv import load_dotenv
+import os
+from flask import Flask, request, jsonify
 
-load_dotenv(dotenv_path='recipient_config.env')
+# Assuming email_service is available for import if needed, 
+# but the deploy.sh script handles the final email.
+# from email_service import send_team_notification 
 
 app = Flask(__name__)
 
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    return "OK", 200
+# --- Mock Function: In a real app, this would use a database or config file ---
+def get_pusher_team(username):
+    """Infers the team based on the pusher's username."""
+    username = username.lower()
+    if 'billing' in username or 'finance' in username:
+        return 'billing'
+    elif 'weight' in username or 'logistics' in username:
+        return 'weight'
+    else:
+        return 'devops'
 
 @app.route('/trigger', methods=['POST'])
 def trigger_handler():
-    # Check for json content type
+    # Check for JSON content type
     if not request.is_json:
         return jsonify({"message": "Content-Type must be application/json"}), 400
 
     data = request.get_json()
     
-    pusher_data = data.get('pusher', {})
-    pusher_username = pusher_data.get('name', 'N/A') 
-    ref = data.get("ref", "")
-    branch = ref.split("/")[-1] if ref.startswith("refs/heads/") else "unknown"
-    action = data.get('action', 'N/A')
-    repository_data = data.get('repository', {})
-    branches_url = repository_data.get('branches_url', 'N/A')
-
-    #process the extracted data
-
-    if action and pusher_data and branches_url:
-        pusher_username = pusher_data.get('name', 'N/A')
-        print("--- GitHub Webhook Received ---")
-        print(f"Action: **{action}**")
-        print(f"Pusher: **{pusher_username}**")
-        print(f"Branches URL: **{branches_url}**")
-        print("-------------------------------")
-    ref = data.get("ref", "")            # e.g. "refs/heads/devops"
-    branch = ref.split("/")[-1] if ref else "unknown"
-    print(f"Branch pushed: {branch}")
-
-    #TEST team mail upon push to dev
-    if branch == 'dev':
-        
-        # 1. Load DevOps emails directly from environment variables
-        # This list will be the actual recipients
-        DEVOPS_EMAILS = [e.strip() for e in os.getenv('DEVOPS_TEAM_EMAILS', '').split(',') if e.strip()]
-        
-        if not DEVOPS_EMAILS:
-            print("ERROR: DEVOPS_TEAM_EMAILS is not configured. Cannot send production email.")
-            return jsonify({
-                "message": f"Code pushed to '{branch}' by {pusher_username}. Configuration error: DEVOPS_TEAM_EMAILS not found.",
-            }), 200
-
-        try:
-            # 2. Call the production-ready function with the actual email list
-            send_team_notification(
-                branch_name=branch, 
-                pusher_username=pusher_username, 
-                recipient_emails=DEVOPS_EMAILS
-            )
-            
-            notification_message = f"Code was pushed into '{branch}' initiated by {pusher_username}. Production notification sent to DevOps Team."
-            
-            return jsonify({
-                "message": notification_message,
-            }), 200
-        
-        except Exception as e:
-            print(f"ERROR: Failed to send DevOps team notification: {e}")
-            return jsonify({
-                "message": f"Code pushed, but failed to send DevOps notification. Error: {str(e)}",
-            }), 200
-
-    # --- END TEAM NOTIFICATION INTEGRATION ---
-
-    return jsonify({"message": "Webhook successfully processed"}), 200
-        
-#    try:
- #       print(f"Running deploy script for branch: {branch}")
-  #      result = subprocess.run(
-   #         ["bash", "deploy.sh", branch],
-    #        capture_output=True,
-     #       text=True
-      #  )
-       # print("--- Deploy Script Output ---")
-        #print(result.stdout)
-        #print(result.stderr)
-    #except Exception as e:
-     #   print(f"Error running deploy script: {e}")
-      #  return jsonify({"message": "Error running deploy script"}), 500
-
-
-        #logic goes here, if action == 'created':...
-    return jsonify({"message": "Webhook successfully processed"}), 200
-
-@app.route('/mailtest', methods=['POST'])
-def mail_test():
-# Check for JSON content type
-    if not request.is_json:
-        return jsonify ({"message": "Content-Type must be application/json"}), 400
-
-    data = request.get_json()
-    
-    # 1. Extract Pusher Username
+    # Extract metadata
     pusher_data = data.get('pusher', {})
     pusher_username = pusher_data.get('name', 'UNKNOWN_USER')
-    
-    # 2. Extract Branch Name (Default to 'main' for simulation)
-    # In a real push, 'ref' is "refs/heads/branch_name"
-    ref = data.get('ref', 'refs/heads/main')
-    branch_name = ref.split('/')[-1] # Extracts 'main' from 'refs/heads/main'
 
-    print("--- Mail Test Webhook Received ---")
-    print(f"Simulated Branch: {branch_name}")
-    print(f"Simulated User: {pusher_username}")
-    print("----------------------------------")
+    ref = data.get("ref", "")
+    branch = ref.split("/")[-1] if ref.startswith("refs/heads/") else "unknown"
     
-    # Send the test email using the new function
+    # Determine the pusher's team
+    pusher_team = get_pusher_team(pusher_username) 
+
+    # Logging for visibility
+    print("--- GitHub Webhook Received ---")
+    print(f"Pusher: {pusher_username}")
+    print(f"Pusher Team: {pusher_team}")
+    print(f"Branch pushed: {branch}")
+    print("-------------------------------")
+
+    # ============================================================
+    # RUN CI PIPELINE (deploy.sh)
+    # ============================================================
     try:
-        send_simple_alert_email(branch_name, pusher_username)
+        if branch == 'ido':
+            print(f"Running deploy script for branch: {branch} with pusher: {pusher_username} and team: {pusher_team}")
+            
+            # Pass all three required arguments to deploy.sh
+            result = subprocess.run(
+                ["bash", "deploy.sh", branch, pusher_username, pusher_team],
+                capture_output=True,
+                text=True,
+                check=True # Raise an exception if the command exits with a non-zero status
+            )
+
+            print("--- Deploy Script Output (STDOUT) ---")
+            print(result.stdout)
+            if result.stderr:
+                 print("--- Deploy Script Output (STDERR) ---")
+                 print(result.stderr)
+            
+            # If the script ran successfully (status code 0)
+            return jsonify({
+                "message": f"Webhook processed. CI pipeline SUCCESS for '{branch}' by '{pusher_username}'.",
+                "output": result.stdout
+            }), 200
+        
+        else:
+            return jsonify({
+                "message": f"Webhook received for branch '{branch}'. CI pipeline SKIPPED (only runs on 'dev')."
+            }), 200
+
+    except subprocess.CalledProcessError as e:
+        # This catches errors where deploy.sh returns non-zero (i.e., test failure)
+        # The failure email is handled inside deploy.sh, but we report the CI failure here.
+        error_output = e.stdout + e.stderr
+        print(f"Error running deploy script (CI FAILURE): {error_output}")
+        
         return jsonify({
-            "message": "Mail test successfully processed and email sent",
-            "branch": branch_name,
-            "user": pusher_username
-        }), 200
+            "message": f"CI Pipeline FAILED for branch '{branch}'. Rollback executed and failure email sent.",
+            "error_summary": error_output.split('\n')[-3:] # Show last few lines of output
+        }), 500
+
     except Exception as e:
-        print(f"Error during email send: {e}")
-        return jsonify({"message": f"Failed to send test email: {str(e)}"}), 500
-
-#run production
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080, debug=True)
+        # Catches general execution errors (e.g., file not found)
+        print(f"Unexpected Error running deploy script: {e}")
+        return jsonify({"message": f"Unexpected CI Server Error: {e}"}), 500
