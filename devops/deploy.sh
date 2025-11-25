@@ -19,6 +19,24 @@ source ../billing/.env
 set +a
 
 echo "Running TEST environment..."
+# Get the absolute path to the devops directory and project root
+DEVOPS_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$DEVOPS_DIR/.." && pwd)"
+
+# If running from inside CI container (/app_root), use host path
+# Otherwise use the resolved path
+if [[ "$PROJECT_ROOT" == "/app_root" ]]; then
+    # We're in the CI container, need to use the actual host path
+    # The CI container mounts /home/ubuntu/ganshmuel-purple to /app_root
+    PROJECT_ROOT="/home/ubuntu/ganshmuel-purple"
+fi
+
+# Export PROJECT_ROOT for docker-compose to use in volume paths
+export PROJECT_ROOT
+
+# Change to devops directory for docker-compose path resolution
+cd "$DEVOPS_DIR" || exit 1
+
 docker compose -f docker-compose-test.yml down
 docker compose -f docker-compose-test.yml up -d --build
 

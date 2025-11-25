@@ -68,11 +68,13 @@ def trigger_handler():
     # ============================================================
     try:
         print(f"Running deploy script for branch: {branch}")
+        # Run from the devops directory to ensure correct path resolution
         result = subprocess.run(
-    ["bash", "/app_root/devops/deploy.sh", branch],
-    capture_output=True,
-    text=True
-)
+            ["bash", "/app_root/devops/deploy.sh", branch],
+            capture_output=True,
+            text=True,
+            cwd="/app_root/devops"  # Set working directory for correct path resolution
+        )
 
 
         print("--- Deploy Script Output ---")

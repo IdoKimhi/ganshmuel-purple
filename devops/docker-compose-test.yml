@@ -21,7 +21,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
     volumes:
-      - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
+      - ${PROJECT_ROOT:-../..}/weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data_test:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -49,8 +49,8 @@ services:
       WEIGHT_MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
       WEIGHT_DB_CONTAINER_PORT: 3306
     volumes:
-      - ../weight/app:/app
-      - ../weight/in:/in
+      - ${PROJECT_ROOT:-../..}/weight/app:/app
+      - ${PROJECT_ROOT:-../..}/weight/in:/in
     ports:
       - "8086:5000"
     networks:
@@ -68,7 +68,7 @@ services:
       MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE}
     volumes:
       - billing_db_data_test:/var/lib/mysql
-      - ../billing/db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
+      - ${PROJECT_ROOT:-../..}/billing/db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
     ports:
       - "8087:3306"
     networks:
@@ -98,7 +98,7 @@ services:
       RATES_DIR: ${RATES_DIR}
       PORT: ${BILLING_SVC_PORT}
     volumes:
-      - ../billing/in:/in
+      - ${PROJECT_ROOT:-../..}/billing/in:/in
 
     ports:
       - "8088:${BILLING_SVC_PORT}"
