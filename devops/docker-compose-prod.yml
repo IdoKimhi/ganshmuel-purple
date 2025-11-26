@@ -34,18 +34,18 @@ services:
   # ================================
   #           WEIGHT APP (PROD)
   # ================================
-  weight-app-prod:
+  weight-app-test:
     build: ../weight
-    container_name: weight-app-prod
+    container_name: weight-app-test
     restart: always
     depends_on:
-      weight-db-prod:
+      weight-db-test:
         condition: service_healthy
     environment:
-      WEIGHT_DB_HOST: weight-db-prod
-      WEIGHT_DB_USER: ${WEIGHT_DB_USER_PROD}
-      WEIGHT_DB_PASSWORD: ${WEIGHT_DB_PASSWORD_PROD}
-      WEIGHT_MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE_PROD}
+      WEIGHT_DB_HOST: weight-db-test
+      WEIGHT_DB_USER: ${WEIGHT_DB_USER}
+      WEIGHT_DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
+      WEIGHT_MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
       WEIGHT_DB_CONTAINER_PORT: 3306
     volumes:
       - ${PROJECT_ROOT:-../..}/weight/app:/app
@@ -54,6 +54,7 @@ services:
       - "8082:5000"
     networks:
       - purple_network_prod
+
 
   # ================================
   #           BILLING DB (PROD)
