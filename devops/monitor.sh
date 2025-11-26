@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-EMAIL_TO="moataz.ody44@gmail.com"
+EMAIL_TO="Moataz.ody44@gmail.com,Chenahrak@gmail.com,ido23131@gmail.com"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SEND_EMAIL="$SCRIPT_DIR/email_service.py"
 
