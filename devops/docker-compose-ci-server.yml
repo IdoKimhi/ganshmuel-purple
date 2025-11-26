@@ -5,8 +5,7 @@ services:
       context: .
       dockerfile: dockerfile
     restart: always
-    ports:
-      - "8080:8080"
+    network_mode: "host"
     env_file:
       - .env
       - recipient_config.env

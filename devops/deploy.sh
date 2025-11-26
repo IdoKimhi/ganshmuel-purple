@@ -37,13 +37,14 @@ export PROJECT_ROOT
 # Change to devops directory for docker-compose path resolution
 cd "$DEVOPS_DIR" || exit 1
 
-docker compose -f docker-compose-test.yml down
+docker compose -f docker-compose-test.yml down -v
 docker compose -f docker-compose-test.yml up -d --build
-
+echo "Waiting 10 seconds for containers to initialize..."
+sleep 10
 
 ################################################
 # SELECT TESTS BASED ON BRANCH
-################################################
+###############################################
 echo "Selecting test script..."
 
 if [ "$BRANCH" = "weight" ]; then
@@ -67,7 +68,7 @@ else
 fi
 
 
-################################################
+###############################################
 # RUN TEST SCRIPTS
 ###############################################
 for script in "${TEST_SCRIPTS[@]}"; do
@@ -104,7 +105,7 @@ done
 echo "✅ All tests PASSED for branch: $BRANCH"
 
 
-################################################
+###############################################
 # DEPLOY (ONLY MAIN)
 ###############################################
 if [ "$BRANCH" = "main" ]; then
