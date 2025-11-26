@@ -101,14 +101,54 @@ def send_build_status_email(status, branch):
     color = "green" if status == "Success" else "red"
     subject = f"Build {status}: Branch '{branch}'"
     
+    # --- Recipient Logic ---
+    
+    # 1. Always include DEVOPS team (Load from environment)
+    devops_emails_str = os.getenv('DEVOPS_TEAM_EMAILS', '')
+    all_recipients = set([e.strip() for e in devops_emails_str.split(',') if e.strip()])
+    
+    print(f"Base recipients (DEVOPS): {all_recipients}")
+
+    # 2. If FAILED, add the respective service team
+    if status != "Success":
+        failure_recipients_str = ''
+        
+        # Determine the correct team based on the branch name
+        if branch == "weight":
+            failure_recipients_str = os.getenv('WEIGHT_TEAM_EMAILS', '')
+        elif branch == "billing":
+            failure_recipients_str = os.getenv('BILLING_TEAM_EMAILS', '')
+        # For 'main' or 'unknown', DEVOPS team is often sufficient, 
+        # but you could decide to include both if all tests run.
+        # Here we only add specific teams for their specific branch tests.
+        
+        # Add failure recipients to the set
+        if failure_recipients_str:
+            failure_emails = [e.strip() for e in failure_recipients_str.split(',') if e.strip()]
+            all_recipients.update(failure_emails)
+            print(f"Added failure recipients for branch '{branch}': {failure_emails}")
+        else:
+            print(f"Warning: No specific team emails found for branch '{branch}' failure.")
+
+    # Convert the set back to a list for the helper function
+    recipient_list = list(all_recipients)
+    
+    if not recipient_list:
+        print("ERROR: No recipients found for build status email. Check DEVOPS_TEAM_EMAILS config.")
+        return
+
+
+    # --- Email Body Construction ---
     body = f"""
     <h2 style="color: {color};">CI Build {status}</h2>
     <p><strong>Branch:</strong> {branch}</p>
     <p><strong>Status:</strong> <span style="color: {color}; font-weight: bold;">{status}</span></p>
     <p>Please check the server logs for details.</p>
     """
-    _send_via_smtp(subject, body)
-
+    
+    # Send the email to the calculated recipient list
+    _send_via_smtp(subject, body, recipient_list)
+    
 def send_team_notification(branch_name, pusher_username, recipient_emails):
     """
     Sends a production deployment notification email to the actual DevOps team.

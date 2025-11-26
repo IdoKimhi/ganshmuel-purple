@@ -11,15 +11,10 @@ services:
       # CHANGED: Path is now local to this folder
       - ./db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
       - weight_data:/var/lib/mysql
-    healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
-      timeout: 40s
-      retries: 10
     ports:
       - "${WEIGHT_DB_HOST_PORT}:3306"
     networks:
       - purple_network
-
   # Service 2: Python API
   weight-app:
     # CHANGED: Build context is now the current directory
@@ -34,7 +29,7 @@ services:
       - ./in:/in
     depends_on:
       weight-db:
-        condition: service_healthy
+        condition: service_started
     environment:
       WEIGHT_DB_HOST: ${WEIGHT_DB_HOST}
       WEIGHT_DB_USER: ${WEIGHT_DB_USER}
@@ -43,11 +38,8 @@ services:
       WEIGHT_DB_CONTAINER_PORT: ${WEIGHT_DB_CONTAINER_PORT}
     networks:
       - purple_network
-
 volumes:
   weight_data:
-
-
 networks:
   purple_network:
     name: purple_network
