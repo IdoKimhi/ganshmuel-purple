@@ -9,10 +9,6 @@ git fetch --all
 git pull origin "$BRANCH"
 
 
-
-
-
-
 echo "Ensuring network exists..."
 docker network create ci-network || true
 

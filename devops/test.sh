@@ -1,2 +1,2 @@
 echo 'hexz world again!!'
-    echo "Ensuring network exists..."cc
+    echo "Ensuring network exists..."ccx
