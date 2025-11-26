@@ -19,7 +19,7 @@ source ../billing/.env
 set +a
 
 echo "Running TEST environment..."
-# Get the absolute path to the devops directory and project root
+# Get the absolute path to the devops directory and project root.
 DEVOPS_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$DEVOPS_DIR/.." && pwd)"
 
