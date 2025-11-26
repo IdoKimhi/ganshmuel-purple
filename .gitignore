@@ -73,7 +73,7 @@ config.json # If used for local secrets/DB connection strings
 docker-compose.local.yml
 
 # ----------------------------------------------------------------------
-# 5. Database Artifacts (MySQL/General)
+# 5. Database sdsArtifacts (MySQL/General)
 # ----------------------------------------------------------------------
 
 
