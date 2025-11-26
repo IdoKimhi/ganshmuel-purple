@@ -7,6 +7,7 @@ import pymysql
 from pymysql.err import IntegrityError
 import requests
 from openpyxl import load_workbook, Workbook
+from werkzeug.utils import secure_filename
 
 # -------------------------------------------------------------------
 # Configuration
@@ -29,6 +30,14 @@ DB_CONFIG = {
 
 WEIGHT_SERVICE_URL = require_env("WEIGHT_SERVICE_URL")
 RATES_DIR = require_env("RATES_DIR")
+
+# allowed upload type
+ALLOWED_RATE_EXTENSIONS = {"xlsx"}
+
+
+def allowed_rate_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_RATE_EXTENSIONS
+
 
 def create_app() -> Flask:
     app = Flask(__name__)
@@ -222,6 +231,35 @@ def create_app() -> Flask:
                     cur.execute(sql, (r["product_id"], r["rate"], r["scope"]))
         finally:
             conn.close()
+
+    @app.route("/rates/upload", methods=["POST"])
+    def upload_rates_file():
+        """
+        POST /rates/upload
+        Accepts a file field named 'file' and saves it as RATES_DIR/rates.xlsx,
+        overwriting any existing file.
+        """
+        if "file" not in request.files:
+            return jsonify({"error": "missing file field"}), 400
+
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"error": "no file selected"}), 400
+
+        if not allowed_rate_file(file.filename):
+            return jsonify({"error": "only .xlsx files are allowed"}), 400
+
+        # Always save as 'rates.xlsx' inside RATES_DIR
+        safe_name = secure_filename("rates.xlsx")
+        dest_path = os.path.join(RATES_DIR, safe_name)
+
+        try:
+            os.makedirs(RATES_DIR, exist_ok=True)
+            file.save(dest_path)
+        except OSError as e:
+            return jsonify({"error": "failed to save file", "details": str(e)}), 500
+
+        return jsonify({"message": "uploaded", "saved_as": safe_name}), 201
 
     @app.route("/rates", methods=["POST"])
     def upload_rates():
@@ -669,5 +707,5 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     app = create_app()
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=True)

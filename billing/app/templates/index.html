@@ -360,9 +360,11 @@
           </div>
           <p class="text-muted mb-3">
             Load rates from an Excel file in the container’s
-            <code>/in</code> directory and download current rates.
+            <code>/in</code> directory, or upload a new file from your computer,
+            and download current rates.
           </p>
 
+          <!-- Existing load-from-/in form -->
           <form id="form-rates" class="row g-2 g-md-3 align-items-center mb-3">
             <div class="col-md-6">
               <label class="form-label">Rates file name (inside /in)</label>
@@ -383,6 +385,32 @@
           </form>
 
           <div id="rates-result" class="alert d-none" role="alert"></div>
+
+          <hr class="my-3" />
+
+          <!-- NEW: upload rates.xlsx from local machine -->
+          <form id="form-upload-rates" class="row g-2 g-md-3 align-items-center mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Upload new rates.xlsx</label>
+              <input
+                type="file"
+                class="form-control"
+                id="rates-file-upload"
+                accept=".xlsx"
+                required
+              />
+              <div class="form-text">
+                This will overwrite <code>/in/rates.xlsx</code> inside the container.
+              </div>
+            </div>
+            <div class="col-md-4">
+              <button type="submit" class="btn btn-outline-primary w-100 btn-icon mt-3 mt-md-4">
+                📤 Upload & overwrite
+              </button>
+            </div>
+          </form>
+
+          <div id="rates-upload-result" class="alert d-none" role="alert"></div>
 
           <hr class="my-3" />
 
@@ -525,10 +553,14 @@
     }
 
     async function apiFetch(path, options = {}) {
+      const headers = {};
+      // Only set JSON header if body is plain JSON (not FormData)
+      if (options.body && !(options.body instanceof FormData)) {
+        headers["Content-Type"] = "application/json";
+      }
+
       const res = await fetch(path, {
-        headers: {
-          "Content-Type": options.body ? "application/json" : undefined,
-        },
+        headers,
         ...options,
       });
 
@@ -823,6 +855,7 @@
 
     // ------------- Rates -------------
 
+    // Load from existing file in /in
     document.getElementById("form-rates").addEventListener("submit", async (e) => {
       e.preventDefault();
       const fname = document.getElementById("rates-file").value.trim();
@@ -850,6 +883,66 @@
         showDebug(err);
       }
     });
+
+    // NEW: upload local rates.xlsx and overwrite /in/rates.xlsx
+    document
+      .getElementById("form-upload-rates")
+      .addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const input = document.getElementById("rates-file-upload");
+        const file = input.files[0];
+        const result = document.getElementById("rates-upload-result");
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+          const res = await fetch("/rates/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            const msg = data && data.error ? data.error : `HTTP ${res.status}`;
+            throw new Error(msg);
+          }
+
+          setAlert(
+            result,
+            "success",
+            `Uploaded "${file.name}" and overwrote /in/rates.xlsx.`
+          );
+          logApi(`Uploaded new rates file "${file.name}" 📤`, "ok");
+          showDebug(data);
+
+          // Optional: automatically load the new file into the DB
+          // by calling existing /rates?file=rates.xlsx
+          try {
+            const loadData = await apiFetch("/rates?file=rates.xlsx", {
+              method: "POST",
+            });
+            logApi(
+              `Auto-loaded new rates from "rates.xlsx" (inserted ${loadData.inserted} rows) ✅`,
+              "ok"
+            );
+            showDebug(loadData);
+          } catch (loadErr) {
+            logApi("Upload ok, but failed to auto-load new rates ❌", "error");
+            showDebug(loadErr);
+          }
+
+        } catch (err) {
+          setAlert(
+            result,
+            "danger",
+            "Failed to upload rates: " + (err.message || "Unknown error")
+          );
+          logApi("Failed to upload rates file ❌", "error");
+        }
+      });
 
     document
       .getElementById("btn-download-rates")
@@ -954,4 +1047,3 @@
   </script>
 </body>
 </html>
-
