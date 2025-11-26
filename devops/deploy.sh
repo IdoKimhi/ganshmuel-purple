@@ -43,7 +43,7 @@ docker compose -f docker-compose-test.yml up -d --build
 
 ################################################
 # SELECT TESTS BASED ON BRANCH
-###############################################
+################################################
 echo "Selecting test script..."
 
 if [ "$BRANCH" = "weight" ]; then
