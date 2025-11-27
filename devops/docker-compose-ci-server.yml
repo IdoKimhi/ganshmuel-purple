@@ -1,23 +1,16 @@
-version: '3.8'
-
+version: "3.9"
 services:
-  ci-server:
-  #instructs docker compose to build an an image from devops/dockerfile
+  ci_server:
     build:
       context: .
       dockerfile: dockerfile
-
-    container_name: ci-server
     restart: always
-
-    ports:
-    - "8000:8000"
-
-    #provision for docker.sock
+    network_mode: "host"
+    env_file:
+      - .env
+      - recipient_config.env
     volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-    - ./:/app_root:ro
-
-    working_dir: /app_root
-
+      - ../:/app_root:rw
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app_root/devops
     command: ["python", "app.py"]

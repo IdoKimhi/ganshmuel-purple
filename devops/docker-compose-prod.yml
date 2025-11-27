@@ -1,0 +1,105 @@
+
+networks:
+  purple_network_prod:
+    driver: bridge
+
+volumes:
+  weight_data_prod:
+  billing_db_data_prod:
+
+services:
+
+  # ================================
+  #           WEIGHT DB (PROD)
+  # ================================
+  weight-db-prod:
+    image: mysql:8.0
+    container_name: weight-db-prod
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${WEIGHT_MYSQL_ROOT_PASSWORD_PROD}
+      MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE_PROD}
+    volumes:
+      - ../weight/db/weightdb.sql:/docker-entrypoint-initdb.d/weightdb.sql
+      - weight_data_prod:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 40s
+      retries: 10
+    ports:
+      - "8081:3306"
+    networks:
+      - purple_network_prod
+
+  # ================================
+  #           WEIGHT APP (PROD)
+  # ================================
+  weight-app-test:
+    build: ../weight
+    container_name: weight-app-test
+    restart: always
+    depends_on:
+      weight-db-test:
+        condition: service_healthy
+    environment:
+      WEIGHT_DB_HOST: weight-db-test
+      WEIGHT_DB_USER: ${WEIGHT_DB_USER}
+      WEIGHT_DB_PASSWORD: ${WEIGHT_DB_PASSWORD}
+      WEIGHT_MYSQL_DATABASE: ${WEIGHT_MYSQL_DATABASE}
+      WEIGHT_DB_CONTAINER_PORT: 3306
+    volumes:
+      - ${PROJECT_ROOT:-../..}/weight/app:/app
+      - ${PROJECT_ROOT:-../..}/weight/in:/in
+    ports:
+      - "8082:5000"
+    networks:
+      - purple_network_prod
+
+
+  # ================================
+  #           BILLING DB (PROD)
+  # ================================
+  billing-db-prod:
+    image: mysql:8.0
+    container_name: billing-db-prod
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${BILLING_MYSQL_ROOT_PASSWORD_PROD}
+      MYSQL_DATABASE: ${BILLING_MYSQL_DATABASE_PROD}
+    volumes:
+      - billing_db_data_prod:/var/lib/mysql
+      - ../billing/db/billingdb.sql:/docker-entrypoint-initdb.d/billingdb.sql:ro
+    ports:
+      - "8083:3306"
+    networks:
+      - purple_network_prod
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 40s
+      retries: 10
+
+  # ================================
+  #           BILLING APP (PROD)
+  # ================================
+  billing-app-prod:
+    build: ../billing
+    container_name: billing-app-prod
+    restart: always
+    depends_on:
+      billing-db-prod:
+        condition: service_healthy
+    environment:
+      DB_HOST: billing-db-prod
+      DB_USER: ${BILLING_DB_USER_PROD}
+      DB_PASSWORD: ${BILLING_DB_PASSWORD_PROD}
+      DB_NAME: ${BILLING_DB_NAME_PROD}
+      DB_PORT: 3306
+      WEIGHT_SERVICE_URL: http://weight-app-prod:5000
+      RATES_DIR: ${RATES_DIR_PROD}
+      PORT: ${BILLING_SVC_PORT_PROD}
+    volumes:
+      - ../billing/in:/in
+    ports:
+      - "8084:${BILLING_SVC_PORT_PROD}"
+    networks:
+      - purple_network_prod
